@@ -7,7 +7,17 @@ argument-hint: [project description]
 
 Automatically analyze the current codebase and generate all claude-flow configuration files. The user should NOT need to fill any placeholders manually.
 
-## Phase 1: Codebase Analysis (NO file writing)
+## Phase 0: Detect Project State
+
+First, determine whether this is an **existing project** or a **new (empty) project**:
+
+- Use Glob to check for source code files (`**/*.{ts,js,py,go,rs,cs,java,jsx,tsx}`)
+- Check for manifest files (package.json, go.mod, Cargo.toml, *.csproj, pyproject.toml, etc.)
+
+**If source files found** → go to Phase 1A (Existing Project)
+**If no source files found** → go to Phase 1B (New Project)
+
+## Phase 1A: Existing Project — Codebase Analysis (NO file writing)
 
 Scan the project to understand its structure. Use Glob, Grep, Read tools:
 
@@ -54,25 +64,60 @@ Scan the project to understand its structure. Use Glob, Grep, Read tools:
 
    **Must wait for user confirmation before Phase 2.**
 
+## Phase 1B: New Project — Guided Setup (NO file writing)
+
+Ask the user to describe the project via AskUserQuestion. Gather in 1-2 rounds:
+
+**Round 1 (required):**
+```
+This looks like a new project. Tell me about it:
+
+1. Language & framework? (e.g., TypeScript + Next.js, Python + FastAPI, Go + Gin, C# + Unity)
+2. What does it do? (one sentence)
+3. Any specific architecture? (e.g., monorepo, microservices, layered, ECS)
+```
+
+**Round 2 (if needed, based on Round 1 answers):**
+```
+A few more details:
+- Test framework preference? (e.g., Jest, pytest, go test)
+- Linter preference? (e.g., ESLint, Ruff, golangci-lint)
+- Any hard constraints? (e.g., "must use SQLAlchemy not raw SQL", "no class components")
+```
+
+Then present a summary for confirmation, same format as Phase 1A step 5 but based on user's answers instead of code scanning.
+
+**Must wait for user confirmation before Phase 2.**
+
 ## Phase 2: Generate Configuration Files
 
 Generate all files based on Phase 1 analysis. Every file must contain **concrete, project-specific content** — no placeholders left.
+
+### 2.0 New project only: Initialize project scaffold
+
+If this is a new project (came from Phase 1B), first set up the basic project structure:
+
+1. **Create manifest file** — `package.json` / `go.mod` / `pyproject.toml` / `*.csproj` etc., based on the user's chosen stack
+2. **Create directory skeleton** — `src/`, `tests/`, etc., appropriate for the stack and architecture
+3. **Create entry point** — A minimal main file so the project can run
+4. **Initialize git** — `git init` if not already a git repo
+5. **Install linter** — Add linter as dev dependency if the user specified one
+
+Keep the scaffold minimal — just enough for the project to build/run. The user will add features later.
 
 ### 2.1 Generate `CLAUDE.md`
 
 Root entry point. Content:
 - Project name (from package.json/go.mod/etc. or directory name)
-- Architecture overview (actual directory structure from Phase 1 scan)
+- Architecture overview (actual directory structure — from Phase 1A scan or Phase 1B scaffold)
 - @import references to subsystem CLAUDE.md files (if multi-module)
 
 Keep under 30 lines. No generic rules — only project-specific structure.
 
 ### 2.2 Generate `.claude/constitution.md`
 
-4-7 articles based on Phase 1 constraint analysis. Each article must have:
-- One-line description of the constraint
-- ✅/❌ paired code examples **using the project's actual code patterns**
-- Reference to relevant Skill if applicable
+- **Existing project**: 4-7 articles based on Phase 1A constraint analysis. Each article must have ✅/❌ paired code examples **using the project's actual code patterns**.
+- **New project**: 2-4 articles based on user's stated constraints and the chosen stack's best practices. Use idiomatic code examples for the language/framework. Focus on constraints that AI would likely violate (e.g., "use X ORM not raw SQL", "all state through store, no local state").
 
 Include the Governance section with enforcement protocol (copy from template).
 
