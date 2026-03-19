@@ -160,7 +160,7 @@ Each Skill follows the `_template/SKILL.md` format with **actual code examples f
 
 ### 2.8 Copy commands and scripts
 
-Ensure `/feature-plan-creator`, `/bug-fix` commands are in place.
+Ensure `/feature-plan-creator`, `/bug-fix`, `/deep-task` commands are in place.
 Copy `scripts/lint-feedback.sh` if Hooks are configured.
 
 ## Phase 3: Verification
@@ -185,12 +185,14 @@ Copy `scripts/lint-feedback.sh` if Hooks are configured.
    - .claude/skills/{custom}/SKILL.md (if any)
    - .claude/commands/feature-plan-creator.md
    - .claude/commands/bug-fix.md
+   - .claude/commands/deep-task.md
 
    Next steps:
    - Review the generated constitution — adjust if any article is wrong
    - Start using: just describe your task, Claude Code will follow the framework
    - For complex features: /feature-plan-creator <name>
    - For bugs: /bug-fix <description>
+   - For complex cross-module tasks: /deep-task <goal>
    ```
 
 ## Prohibited Actions

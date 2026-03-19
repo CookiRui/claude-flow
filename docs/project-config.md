@@ -266,9 +266,14 @@ description: "网络通信规范：HTTP请求、Socket连接、Protobuf消息收
 
 ## 7. Commands 命令层
 
-### 7.1 最有价值的两个 Command
+### 7.1 最有价值的三个 Command
 
 经过实际验证，投入产出比最高的：
+
+**`/deep-task`** — 8 层自主执行引擎（[详细文档](autonomous-engine.md)）
+- 流程：复杂度分流 → 目标审查 → DAG 分解 → 并行 Agent 执行 → 三级验证 → 元学习
+- S/M 级走快速路径，L/XL 级走完整引擎
+- 价值：把 8 层引擎从方法论变成可执行流程，自动模型路由（haiku/sonnet/opus），并行执行
 
 **`/feature-plan-creator`** — 需求分析 → 技术方案 → 微任务拆解
 - 流程：读文档 → 多轮确认需求 → 输出 plan.md → 拆解为 ≤5 分钟微任务
@@ -402,9 +407,8 @@ description: "网络通信规范：HTTP请求、Socket连接、Protobuf消息收
 ### 自动初始化（推荐）
 
 ```bash
-# 1. 复制框架到项目
-cp -r template/ your-project/
-cp -r scripts/ your-project/scripts/
+# 1. 一键安装到项目
+python install.py /path/to/your-project
 
 # 2. 在项目目录下启动 Claude Code，运行：
 /init-project
