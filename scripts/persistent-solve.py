@@ -298,20 +298,109 @@ If stuck, try self-rescue (change approach / decompose finer / deep search) befo
 # Session Runner
 # ============================================================
 
-def run_claude_session(prompt: str, timeout: int = 1800) -> str:
-    """Launch a Claude Code session and return its output."""
+def _parse_claude_json(raw: str) -> dict:
+    """Parse the JSON blob returned by ``claude --output-format json``.
+
+    Expected top-level keys (all optional — we default gracefully):
+        result          str   — the assistant's final text
+        is_error        bool  — True when claude reports an error
+        total_cost_usd  float — cumulative API cost for the session
+        usage           dict  — {input_tokens, output_tokens, ...}
+        duration_ms     int   — wall-clock ms for the session
+        stop_reason     str   — e.g. "end_turn", "max_tokens", ...
+
+    Returns a normalised dict with keys:
+        output, cost_usd, input_tokens, output_tokens,
+        duration_ms, stop_reason, success
+    """
+    _DEFAULTS = {
+        "output":        "",
+        "cost_usd":      0.0,
+        "input_tokens":  0,
+        "output_tokens": 0,
+        "duration_ms":   0,
+        "stop_reason":   "unknown",
+        "success":       False,
+    }
+
+    if not raw or not raw.strip():
+        return _DEFAULTS.copy()
+
     try:
-        result = subprocess.run(
-            ["claude", "-p", prompt, "--output-format", "text", "--dangerously-skip-permissions"],
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        # Fallback: treat the raw text as the output so callers still see it.
+        fallback = _DEFAULTS.copy()
+        fallback["output"] = raw
+        return fallback
+
+    usage = data.get("usage") or {}
+    is_error = bool(data.get("is_error", True))
+
+    return {
+        "output":        data.get("result") or "",
+        "cost_usd":      float(data.get("total_cost_usd") or 0.0),
+        "input_tokens":  int(usage.get("input_tokens") or 0),
+        "output_tokens": int(usage.get("output_tokens") or 0),
+        "duration_ms":   int(data.get("duration_ms") or 0),
+        "stop_reason":   str(data.get("stop_reason") or "unknown"),
+        "success":       not is_error,
+    }
+
+
+def run_claude_session(
+    prompt: str,
+    timeout: int = 1800,
+    budget_usd: float | None = None,
+) -> dict:
+    """Launch a Claude Code session and return a structured result dict.
+
+    Parameters
+    ----------
+    prompt:     The full prompt to pass to ``claude -p``.
+    timeout:    Wall-clock seconds before the subprocess is killed.
+    budget_usd: When provided, adds ``--max-budget-usd <value>`` to the
+                command so Claude's own budget guard triggers first.
+
+    Return keys
+    -----------
+    output        (str)   — assistant's final text
+    cost_usd      (float) — total API cost in USD
+    input_tokens  (int)
+    output_tokens (int)
+    duration_ms   (int)
+    stop_reason   (str)
+    success       (bool)  — False when claude reports is_error or on exception
+    """
+    cmd = [
+        "claude", "-p", prompt,
+        "--output-format", "json",
+        "--dangerously-skip-permissions",
+    ]
+    if budget_usd is not None:
+        cmd += ["--max-budget-usd", str(budget_usd)]
+
+    try:
+        proc = subprocess.run(
+            cmd,
             capture_output=True,
             text=True,
             timeout=timeout,
             encoding="utf-8",
-            errors="replace"
+            errors="replace",
         )
-        return result.stdout or ""
+        return _parse_claude_json(proc.stdout or "")
+
     except subprocess.TimeoutExpired:
-        return "[TIMEOUT] Session timed out"
+        return {
+            "output":        "[TIMEOUT] Session timed out",
+            "cost_usd":      0.0,
+            "input_tokens":  0,
+            "output_tokens": 0,
+            "duration_ms":   timeout * 1000,
+            "stop_reason":   "timeout",
+            "success":       False,
+        }
     except FileNotFoundError:
         print("Error: 'claude' command not found. Make sure Claude Code is installed and in PATH.")
         sys.exit(1)
@@ -373,7 +462,8 @@ def persistent_solve(goal: str, max_rounds: int, max_time: int):
             prompt = build_resume_prompt(goal, round_num, wip_content)
 
         # Execute
-        output = run_claude_session(prompt, timeout=session_timeout)
+        session = run_claude_session(prompt, timeout=session_timeout)
+        output_text = session["output"]
 
         # Check WIP file for status (the real handshake)
         wip_after = read_wip()
@@ -397,6 +487,11 @@ def persistent_solve(goal: str, max_rounds: int, max_time: int):
 
         prev_completed = current_completed
 
+        # Log session cost when available
+        if session["cost_usd"] > 0:
+            print(f"  Session cost: ${session['cost_usd']:.4f} | "
+                  f"tokens in/out: {session['input_tokens']}/{session['output_tokens']}")
+
         # Status handling — based on WIP file, not stdout parsing
         if wip_status == "done":
             print(f"\n{'='*60}")
@@ -414,11 +509,11 @@ def persistent_solve(goal: str, max_rounds: int, max_time: int):
             print(f"{'='*60}")
             return
 
-        if "[TIMEOUT]" in output:
+        if session["stop_reason"] == "timeout" or "[TIMEOUT]" in output_text:
             print(f"  Round timed out. WIP may not be saved.")
 
         # Also check stdout as fallback (Claude might not have written WIP)
-        if "[GOAL_ACHIEVED]" in output and wip_status != "done":
+        if "[GOAL_ACHIEVED]" in output_text and wip_status != "done":
             print(f"\n{'='*60}")
             print(f"Goal achieved in round {round_num} (detected from output)!")
             print(f"Total time: {int(time.time() - start_time)}s")
