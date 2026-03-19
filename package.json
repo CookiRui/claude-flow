@@ -1,0 +1,35 @@
+{
+  "name": "claude-autosolve",
+  "version": "1.0.0",
+  "description": "Structured project cognition + autonomous execution framework for Claude Code. 4-layer config + 8-layer engine + atomic DAG scheduler.",
+  "bin": {
+    "claude-autosolve": "bin/claude-autosolve.js"
+  },
+  "files": [
+    "bin/",
+    "template/",
+    "scripts/"
+  ],
+  "keywords": [
+    "claude",
+    "claude-code",
+    "anthropic",
+    "ai",
+    "autonomous",
+    "self-loop",
+    "dag",
+    "workflow",
+    "framework",
+    "tdd",
+    "code-generation",
+    "developer-tools"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CookiRui/claude-flow.git"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}

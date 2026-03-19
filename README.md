@@ -21,11 +21,14 @@
 ### 1. 安装到你的项目
 
 ```bash
-# 克隆仓库
+# 方式 A：npx（推荐）
+npx claude-autosolve init                    # 安装到当前目录
+npx claude-autosolve init /path/to/project   # 安装到指定目录
+npx claude-autosolve init --force            # 强制覆盖已有文件
+
+# 方式 B：Python
 git clone https://github.com/CookiRui/claude-flow.git
 cd claude-flow
-
-# 一键安装到目标项目
 python install.py /path/to/your-project
 ```
 

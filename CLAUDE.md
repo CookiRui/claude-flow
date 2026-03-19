@@ -8,7 +8,8 @@
 template/   -> 用户项目模板（CLAUDE.md、.claude/ 配置、.claudeignore）
 scripts/    -> 工具脚本（持久化循环、代码地图、lint 反馈）
 docs/       -> 方法论文档
-install.py  -> 一键安装脚本
+bin/        -> npm CLI 入口（npx claude-autosolve init）
+install.py  -> Python 一键安装脚本
 ```
 
 ## 规则
