@@ -1,0 +1,27 @@
+# Build artifacts
+build/
+dist/
+
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+
+# IDE
+.idea/
+.vs/
+.vscode/
+*.suo
+*.user
+
+# Repo map output (generated)
+.repo-map.json
+.repo-map.md
+
+# Persistent loop runtime state (WIP is ephemeral)
+.claude-flow/wip.md
+
+# Logs and temp files
+*.log
+*.tmp
+*.bak
