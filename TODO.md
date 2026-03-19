@@ -2,7 +2,7 @@
 
 ## 扩大影响力（优先）
 
-- [ ] 发 npm 包（`npx claude-flow init`）— 降低使用门槛，npm 有自然流量
+- [x] 发 npm 包 — `npx claude-autosolve init`（已发布 v1.0.0）
 - [ ] 加英文 README — Claude Code 用户主要在英文社区
 - [ ] 写一篇实战博客（Medium / dev.to）— "How I made Claude Code 10x more reliable"
 - [ ] 发 Twitter/X 线程 — 标记 @AnthropicAI，Claude Code 社区活跃
