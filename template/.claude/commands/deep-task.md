@@ -277,7 +277,27 @@ Analyze the execution trace and save insights:
 3. Any new patterns worth remembering?
 4. How accurate were the time/effort estimates?
 
-Write to `memory/meta_{domain}.md`:
+### 5.1 Write to project: `.claude-flow/learnings.md`
+
+This is the **project-level** learning log, visible to all team members and persisted in git.
+
+If the file doesn't exist, create it with a header. Then **append** a new entry (never overwrite previous entries):
+
+```markdown
+## {date} — {goal summary}
+
+- **Complexity**: estimated {X}, actual {Y}
+- **Strategies that worked**: {list}
+- **Strategies that failed**: {list with reasons}
+- **Pitfalls discovered**: {list}
+- **Verification notes**: L{N} was {sufficient/insufficient}, because {reason}
+- **Time**: {rounds} rounds, {sub-tasks} sub-tasks
+```
+
+### 5.2 Write to Claude memory: `memory/meta_{domain}.md`
+
+This is **Claude's private memory** for cross-project pattern matching. Write or update:
+
 ```markdown
 ---
 name: meta_{domain}
@@ -298,6 +318,15 @@ type: feedback
 ```
 
 If the file exists, update it. If not, create it.
+
+### 5.3 Update project rules (if warranted)
+
+If the execution revealed a constraint that the constitution or rules don't cover:
+- New architectural constraint → propose addition to `.claude/constitution.md`
+- New coding pattern → propose addition to `.claude/rules/`
+- New framework usage pattern → propose new Skill in `.claude/skills/`
+
+**Do not auto-modify these files** — output the proposed change and let the user decide via `AskUserQuestion`.
 
 ---
 

@@ -26,5 +26,5 @@ __pycache__/
 # Local settings (may contain API keys)
 .claude/settings.local.json
 
-# Persistent loop runtime state
-.claude-flow/
+# Persistent loop runtime state (WIP is ephemeral, learnings are kept)
+.claude-flow/wip.md

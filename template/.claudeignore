@@ -38,5 +38,5 @@ gen/
 *.tmp
 *.bak
 
-# Persistent loop runtime state
-.claude-flow/
+# Persistent loop runtime state (WIP is ephemeral)
+.claude-flow/wip.md
