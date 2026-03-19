@@ -170,7 +170,7 @@ def run_claude_session(prompt: str, timeout: int = 1800) -> str:
     """Launch a Claude Code session and return its output."""
     try:
         result = subprocess.run(
-            ["claude", "-p", prompt, "--output-format", "text"],
+            ["claude", "-p", prompt, "--output-format", "text", "--dangerously-skip-permissions"],
             capture_output=True,
             text=True,
             timeout=timeout,
