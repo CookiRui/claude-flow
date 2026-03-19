@@ -150,24 +150,121 @@ Record salvage in the DAG status for future attempts.
 ### L1 — Self-Check (during Phase 3, per sub-task)
 Each Agent verifies its own acceptance criteria. Already done in execution loop.
 
-### L2 — Adversarial Review (after all sub-tasks complete)
+### L2 — Multi-Agent Adversarial Loop (after all sub-tasks complete)
 
-Launch a dedicated Agent:
+L2 is a **Reviewer ↔ Executor convergence loop**, not a one-shot review.
+
+```
+┌─ Reviewer Agent (sonnet) ◄───────────────┐
+│  审查代码，提出问题清单                      │
+│  输出: ISSUES [...] 或 PASS                 │
+├─ PASS? ─── 是 → 进入 L3 ─────────────────→ 退出
+│         └─ 否 ↓                             │
+│  Executor Agent (sonnet)                    │
+│  修复 Reviewer 提出的每个问题                │
+│  git commit -m "fix: L2 review round N"     │
+│                                             │
+└─ 回到 Reviewer，重新审查 ────────────────────┘
+   (最多 3 轮，第 3 轮仍有问题 → 升级给用户)
+```
+
+**Round 1 — Reviewer Agent:**
 ```
 Agent(
   model="sonnet",
-  prompt="You are a strict code reviewer. Here is the full diff of changes:\n\n{git diff from start}\n\nCheck:\n1. Are edge cases handled?\n2. What implicit assumptions could break?\n3. Any integration risks with other modules?\n4. Constitution compliance (read .claude/constitution.md)?\n\nOnly flag real issues, not style nitpicks. Output a list of issues or 'PASS'."
+  prompt="You are a strict, independent code reviewer.
+
+Review the following diff:
+{git diff from start of /deep-task}
+
+Check these dimensions:
+1. Edge cases: are boundary conditions handled?
+2. Assumptions: what implicit assumptions could break?
+3. Integration: any risks with other modules?
+4. Constitution: read .claude/constitution.md, check compliance article by article
+5. Tests: are critical paths covered by tests?
+
+Rules:
+- Only flag REAL issues that could cause bugs or violate architecture. No style nitpicks.
+- For each issue, specify: file, line, severity (critical/warning), what's wrong, how to fix.
+- If everything looks good, output exactly: PASS
+
+Output format:
+ISSUES:
+- [critical] file:line — description — suggested fix
+- [warning] file:line — description — suggested fix
+Or:
+PASS"
 )
 ```
 
-If issues found → fix → re-run L2.
+**If ISSUES → Executor Agent:**
+```
+Agent(
+  model="sonnet",
+  prompt="Fix the following issues found by code review.
+Do NOT argue with the reviewer — just fix each issue.
+After fixing, run relevant tests to confirm.
+git commit your fixes.
+
+Issues to fix:
+{reviewer's issue list}
+
+Rules:
+- Read .claude/constitution.md before making changes
+- One commit per issue or group of related issues
+- Run tests after fixing"
+)
+```
+
+**Then back to Reviewer** with the updated diff. Repeat until PASS or 3 rounds.
+
+**Round limit**: If Reviewer still reports issues after 3 rounds → `AskUserQuestion` with the remaining issues, let user decide whether to fix or accept.
+
+### L2-Alt — Test Adversarial Loop (for critical paths)
+
+For sub-tasks marked as critical, run an additional adversarial pattern:
+
+```
+┌─ Tester Agent ◄───────────────────┐
+│  写边界测试和破坏性测试              │
+│  输出: 新测试文件                   │
+├─ 测试全过? ── 是 → 完成 ─────────→ 退出
+│           └─ 否 ↓                  │
+│  Executor Agent                    │
+│  让失败的测试通过（不能删测试）      │
+│  git commit                        │
+│                                    │
+└─ 回到 Tester，写更多边界测试 ───────┘
+   (最多 3 轮)
+```
+
+**Tester Agent:**
+```
+Agent(
+  model="sonnet",
+  prompt="You are a QA engineer trying to BREAK this code.
+
+Read the diff: {git diff}
+Read the acceptance criteria: {original goal criteria}
+
+Write tests that:
+1. Test boundary values (0, -1, MAX, empty, null)
+2. Test concurrent/race conditions (if applicable)
+3. Test error paths (network failure, invalid input, disk full)
+4. Test combinations the developer probably didn't think of
+
+Do NOT write happy-path tests — those already exist.
+Output: test files with descriptive names. Run them. Report which pass and which fail."
+)
+```
 
 ### L3 — End-to-End (final gate)
-1. Run full test suite
+1. Run full test suite (including all tests from L2-Alt)
 2. Check original goal's acceptance criteria
 3. Constitution compliance audit (article by article)
 4. If all pass → proceed to Phase 5
-5. If fail → fix → re-verify from L1
+5. If fail → fix → re-verify from L2
 
 ---
 
