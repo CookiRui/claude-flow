@@ -38,12 +38,18 @@ Scan the project to understand its structure. Use Glob, Grep, Read tools:
    - Check for performance-sensitive paths — AI would write allocating code
    - Check for enforced tech choices (specific ORM, async library, etc.)
 
-4. **Check existing configuration**
+4. **Detect CI/CD and workflow patterns**
+   - Check for `.github/workflows/`, `.gitlab-ci.yml`, `Jenkinsfile`, `.gitea/`, etc.
+   - Check git branch naming patterns: `git branch -a` to identify conventions (feat/, fix/, etc.)
+   - Identify protected/generated directories that AI should not touch (build/, dist/, vendor/, etc.)
+   - Check for `.env` files or secrets patterns
+
+5. **Check existing configuration**
    - Look for existing CLAUDE.md, .claude/ directory, .claudeignore
    - Look for existing linting config, test config, CI/CD setup
    - If configs already exist, ask user whether to overwrite or merge
 
-5. **Present findings and confirm**
+6. **Present findings and confirm**
 
    Output a summary via AskUserQuestion:
    ```
@@ -129,6 +135,24 @@ End with a self-check checklist.
 
 Only create rules that are NOT derivable from the constitution. If there's nothing to add, create a minimal file with just the self-check checklist.
 
+### 2.3b Generate `.claude/rules/git-workflow.md`
+
+Based on Phase 1 analysis of git history and branch conventions:
+- **Commit message format**: detect existing pattern from `git log --oneline -20`, or default to `type(scope): description`
+- **Branch naming**: detect from `git branch -a`, or default to `feat/`, `fix/`, `chore/`
+- **Atomic commits**: always include this rule
+- End with a self-check checklist
+
+### 2.3c Generate `.claude/rules/security.md`
+
+Based on detected project type:
+- **No secrets in code**: always include — use env vars
+- **Input validation**: include if the project has HTTP endpoints, CLI inputs, or external API calls
+- **Dependency safety**: include if the project has a package manager with lockfile
+- End with a self-check checklist
+
+If the project is purely internal tooling with no external-facing surface, keep this minimal (just the secrets rule).
+
 ### 2.4 Generate `.claudeignore`
 
 Based on detected project type:
@@ -138,11 +162,28 @@ Based on detected project type:
 
 ### 2.5 Configure `.claude/settings.json`
 
-Set up Hooks based on detected linter:
-- Node.js project with ESLint → configure lint-feedback.sh hook
-- Python with Ruff/Flake8 → configure lint-feedback.sh hook
-- Go with golangci-lint → configure lint-feedback.sh hook
-- If no linter detected → configure basic hook, suggest installing one
+Generate a complete settings.json with three sections:
+
+**Permissions (deny list)** — based on Phase 1 detection of protected paths:
+- Always deny: `.env*` (edit/write)
+- If Node.js: deny `node_modules/**` (read/edit/write)
+- If build output detected: deny `{build-dir}/**` (edit/write)
+- If the project has generated files (e.g., protobuf output, code-gen): deny those paths
+
+**Hooks — PostToolUse:**
+- `lint-feedback.sh` on Edit|Write — based on detected linter:
+  - Node.js with ESLint → configure
+  - Python with Ruff/Flake8 → configure
+  - Go with golangci-lint → configure
+  - If no linter detected → configure basic hook, suggest installing one
+
+**Hooks — PreToolUse:**
+- `protect-files.sh` on Edit|Write — configure HARD_PROTECTED and SOFT_PROTECTED lists based on Phase 1 step 4 detection:
+  - HARD_PROTECTED: config directories, .env files, lockfiles
+  - SOFT_PROTECTED: build output, generated code, vendor directories
+
+**Hooks — SessionStart:**
+- `reinject-context.sh` on compact — always configure, no customization needed
 
 ### 2.6 Copy built-in Skills
 
@@ -160,8 +201,66 @@ Each Skill follows the `_template/SKILL.md` format with **actual code examples f
 
 ### 2.8 Copy commands and scripts
 
-Ensure `/feature-plan-creator`, `/bug-fix`, `/deep-task` commands are in place.
+Ensure `/feature-plan-creator`, `/bug-fix`, `/deep-task`, `/upgrade` commands are in place.
 Copy `scripts/lint-feedback.sh` if Hooks are configured.
+
+### 2.9 Generate `.claude/agents/`
+
+Generate 3 agent files with **project-specific content** (no placeholders):
+
+**feature-builder.md** — Fill in:
+- `{build-command}`, `{test-single-command}`, `{test-all-command}`, `{lint-command}`: from detected build/test/lint tools
+- `{base-branch}`: from detected default branch (`main` or `master`)
+- `{repo-map-command}`: `python scripts/repo-map.py --format md --no-refs` if repo-map.py was copied
+
+**code-reviewer.md** — Fill in:
+- `{performance-critical-path}`: from Phase 1 constraint analysis (e.g., "request handlers", "render loop", "hot paths")
+- `{project-specific-performance-criteria}`: from constitution performance articles (if any)
+- `{project-specific-review-criteria}`: from constitution articles that a reviewer should check
+
+**test-writer.md** — Fill in:
+- `{test-framework}`: detected test framework (Jest, pytest, go test, etc.)
+- `{test-directory}`: detected test directory (tests/, __tests__/, etc.)
+- `{test-naming-convention}`: detected from existing tests or language convention
+- `{test-run-command}`: the actual command to run tests
+- `{performance-critical-path}`: same as code-reviewer
+
+### 2.10 Generate hook scripts
+
+Copy `.claude/hooks/protect-files.sh` and `.claude/hooks/reinject-context.sh` from templates, then customize:
+
+**protect-files.sh** — Replace placeholder lists with actual project paths:
+- `HARD_PROTECTED`: config directories detected in Phase 1 step 4 (e.g., `ProjectSettings/`, `.env`, `*.lock`)
+- `SOFT_PROTECTED`: generated/build directories (e.g., `build/`, `dist/`, `node_modules/`, `vendor/`)
+
+**reinject-context.sh** — No customization needed, works as-is.
+
+### 2.11 Generate `REVIEW.md`
+
+Generate a project-specific code review standards file based on Phase 1 analysis:
+
+- **Dimension A (Performance)**: Fill rules based on detected performance constraints (from constitution). If no performance-critical paths, keep minimal.
+- **Dimension B (Maintainability)**: Fill with project's naming conventions, module boundaries, commit standards (from git-workflow rules).
+- **Dimension C (Correctness & Security)**: Fill with project-specific validation rules, dependency manifest path, issue tracker URL.
+- **Technology checklist**: Add language/framework-specific checks (e.g., React: "no direct DOM manipulation", Go: "errors must be checked", Python: "no bare except").
+
+If the project is small/simple, generate a lean REVIEW.md with just the essentials (skip the extension tables).
+
+### 2.12 Generate `.github/workflows/ci.yml` (if applicable)
+
+Only generate if:
+- The project does NOT already have CI/CD configuration
+- The project is hosted on GitHub (check `git remote -v` for github.com)
+
+If generating, fill in:
+- `{language-runtime}`: detected setup action (e.g., `actions/setup-node`)
+- `{language-version}`: detected from manifest (e.g., package.json engines, .python-version)
+- `{install-command}`: detected from manifest (e.g., `npm ci`, `pip install -r requirements.txt`)
+- `{build-command}`: detected build script, or remove step if not applicable
+- `{lint-command}`: detected linter command
+- `{test-command}`: detected test command
+
+The AI code review job requires `ANTHROPIC_API_KEY` — mention this in the output summary and suggest the user add it to GitHub Secrets if they want AI reviews.
 
 ## Phase 3: Verification
 
@@ -176,23 +275,33 @@ Copy `scripts/lint-feedback.sh` if Hooks are configured.
    ```
    Generated:
    - CLAUDE.md (N lines)
+   - REVIEW.md (3 dimensions, N rules)
    - .claude/constitution.md (N articles)
    - .claude/rules/coding-style.md (N rules)
+   - .claude/rules/git-workflow.md (commit format, branch naming, atomic commits)
+   - .claude/rules/security.md (secrets, validation, dependencies)
    - .claudeignore
-   - .claude/settings.json (hooks: lint-feedback)
+   - .claude/settings.json (hooks: lint + protect-files + reinject-context | deny: N paths)
+   - .claude/agents/feature-builder.md (build: {cmd}, test: {cmd})
+   - .claude/agents/code-reviewer.md (review criteria configured)
+   - .claude/agents/test-writer.md (framework: {framework}, dir: {dir})
+   - .claude/hooks/protect-files.sh (hard: N paths, soft: N paths)
+   - .claude/hooks/reinject-context.sh
    - .claude/skills/tdd/SKILL.md
    - .claude/skills/verification/SKILL.md
    - .claude/skills/{custom}/SKILL.md (if any)
-   - .claude/commands/feature-plan-creator.md
-   - .claude/commands/bug-fix.md
-   - .claude/commands/deep-task.md
+   - .claude/commands/{feature-plan-creator,bug-fix,deep-task,upgrade}.md
+   - .github/workflows/ci.yml (if generated — requires ANTHROPIC_API_KEY secret for AI review)
 
    Next steps:
    - Review the generated constitution — adjust if any article is wrong
+   - Review REVIEW.md — add project-specific performance/security rules
+   - If CI was generated: add ANTHROPIC_API_KEY to GitHub Secrets for AI code review
    - Start using: just describe your task, Claude Code will follow the framework
    - For complex features: /feature-plan-creator <name>
    - For bugs: /bug-fix <description>
    - For complex cross-module tasks: /deep-task <goal>
+   - To update after claude-flow releases: /upgrade
    ```
 
 ## Prohibited Actions
