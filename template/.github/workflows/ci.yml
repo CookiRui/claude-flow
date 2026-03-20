@@ -1,0 +1,159 @@
+# CI/CD Workflow Template
+# ========================
+# This file is a starting point. Search for all {placeholder} markers and replace them.
+#
+# Required replacements:
+#   {language-runtime}  — e.g., actions/setup-node, actions/setup-python, actions/setup-go
+#   {language-version}  — e.g., "20", "3.11", "1.21"
+#   {install-command}   — e.g., "npm ci", "pip install -r requirements.txt", "go mod download"
+#   {build-command}     — e.g., "npm run build", "python -m build", or remove step if not applicable
+#   {lint-command}      — e.g., "npm run lint", "ruff check .", "golangci-lint run"
+#   {test-command}      — e.g., "npm test", "pytest", "go test ./..."
+#
+# Required GitHub Secrets (Settings → Secrets and variables → Actions):
+#   ANTHROPIC_API_KEY   — Required for the AI Code Review job (get from console.anthropic.com)
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  # ─────────────────────────────────────────────
+  # Job 1: Build, Lint & Test
+  # ─────────────────────────────────────────────
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Replace {language-runtime} with the appropriate setup action, e.g.:
+      #   actions/setup-node  → Node.js
+      #   actions/setup-python → Python
+      #   actions/setup-go    → Go
+      #   actions/setup-java  → Java (with distribution: 'temurin')
+      - name: Set up {language-runtime}
+        uses: {language-runtime}@v4
+        with:
+          # Replace {language-version} with the version string your project requires.
+          # Examples: "20" (Node LTS), "3.11" (Python), "1.21" (Go)
+          node-version: "{language-version}"   # rename key to match your runtime (e.g., python-version, go-version)
+
+      - name: Install dependencies
+        # Replace {install-command} with your package manager install command.
+        # Examples: "npm ci", "pip install -r requirements.txt", "go mod download"
+        run: {install-command}
+
+      - name: Build
+        # Replace {build-command} with your build command.
+        # If your project has no explicit build step, remove this step entirely.
+        # Examples: "npm run build", "python -m build", "go build ./..."
+        run: {build-command}
+
+      - name: Lint
+        # Replace {lint-command} with your linter command.
+        # Examples: "npm run lint", "ruff check .", "golangci-lint run", "eslint ."
+        run: {lint-command}
+
+      - name: Test
+        # Replace {test-command} with your test runner command.
+        # Examples: "npm test", "pytest --tb=short", "go test ./..."
+        run: {test-command}
+
+  # ─────────────────────────────────────────────
+  # Job 2: AI Code Review (pull_request only)
+  # ─────────────────────────────────────────────
+  # This job uses Claude Code in headless mode to review the PR diff.
+  # It reads REVIEW.md (if present) for project-specific review standards,
+  # then posts its findings as a PR comment.
+  #
+  # Prerequisites:
+  #   1. Add ANTHROPIC_API_KEY to your repository secrets.
+  #   2. Optionally create a REVIEW.md file at the repo root to guide the review.
+  #      See: https://github.com/CookiRui/claude-flow for an example.
+  #
+  # To disable this job, remove it entirely or comment it out.
+  ai-review:
+    name: AI Code Review
+    runs-on: ubuntu-latest
+    # Only run on pull requests (not on direct pushes to main/master)
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read        # Read repo contents
+      pull-requests: write  # Post review comment
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # Fetch the full history so Claude can diff properly
+          fetch-depth: 0
+
+      - name: Set up Node.js (for Claude Code CLI)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Run AI Code Review
+        id: ai_review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Build the git diff for the PR
+          git fetch origin ${{ github.base_ref }}
+          DIFF=$(git diff origin/${{ github.base_ref }}...HEAD -- . ':(exclude)package-lock.json' ':(exclude)*.lock' | head -c 20000)
+
+          # Compose the review prompt
+          REVIEW_STANDARDS=""
+          if [ -f "REVIEW.md" ]; then
+            REVIEW_STANDARDS=$(cat REVIEW.md)
+          fi
+
+          PROMPT="You are performing a code review on a pull request.
+
+          $([ -n "$REVIEW_STANDARDS" ] && echo "## Project Review Standards
+          $REVIEW_STANDARDS
+
+          ")## PR Diff
+          \`\`\`diff
+          $DIFF
+          \`\`\`
+
+          Please review this diff and provide:
+          1. A brief summary of what the changes do
+          2. Any bugs, logic errors, or security concerns
+          3. Code quality and style observations
+          4. Suggestions for improvement (optional)
+
+          Be concise and constructive. Focus on issues that matter."
+
+          # Run Claude Code in headless (non-interactive) mode with read-only tools
+          REVIEW=$(claude --headless \
+            --allowedTools "Read,Glob,Grep" \
+            --print \
+            "$PROMPT" 2>&1 || echo "AI review could not be completed.")
+
+          # Build a valid JSON body using python (avoids shell escaping issues)
+          BODY=$(printf "## AI Code Review\n\n%s" "$REVIEW" | python3 -c "import sys, json; print(json.dumps({'body': sys.stdin.read()}))")
+
+          # Post the review as a PR comment via GitHub API
+          curl -s -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            -d "$BODY" \
+            || echo "Warning: could not post PR comment (check GITHUB_TOKEN permissions)."

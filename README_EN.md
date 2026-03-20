@@ -13,7 +13,11 @@ Two complementary systems that transform Claude Code from "starting from scratch
 
 **Highlights**:
 - One command auto-analyzes your project and generates all configuration — zero manual editing
+- 3 specialized Agent templates (feature builder, code reviewer, adversarial test writer)
 - 3 utility scripts (atomic DAG scheduler, code map, lint feedback loop)
+- Protective Hooks (file protection + post-compact context recovery) + deny permission templates
+- CI/CD template (GitHub Actions build/test + AI code review)
+- Code review standards template (REVIEW.md, 3 dimensions × 3 severity levels)
 - Methodology distilled from real projects with 100+ config files
 
 ---
@@ -96,12 +100,25 @@ python scripts/persistent-solve.py "Refactor the entire data layer" --max-budget
 ```
 template/
 ├── CLAUDE.md                          # Root entry: architecture overview
+├── REVIEW.md                          # Code review standards (3 dimensions × 3 severity levels)
 ├── .claudeignore                      # AI ignore file config
+├── .github/
+│   └── workflows/
+│       └── ci.yml                     # CI/CD template (build/test + AI code review)
 └── .claude/
     ├── constitution.md                # Constitution template (4-7 core constraints + enforcement)
-    ├── settings.json                  # Pre-configured Hooks (lint feedback loop)
+    ├── settings.json                  # Pre-configured Hooks (lint + file protection + context injection) + deny permissions
+    ├── agents/
+    │   ├── feature-builder.md         # Agent: end-to-end feature implementation (worktree + TDD + PR)
+    │   ├── code-reviewer.md           # Agent: read-only code review (structured report)
+    │   └── test-writer.md             # Agent: adversarial test writing (boundary/stress/concurrency)
+    ├── hooks/
+    │   ├── protect-files.sh           # Hook: edit protection (hard block + soft warning)
+    │   └── reinject-context.sh        # Hook: auto-restore context after compact
     ├── rules/
-    │   └── coding-style.md            # Coding style rules template
+    │   ├── coding-style.md            # Coding style rules template
+    │   ├── git-workflow.md            # Git workflow rules (commit format/branch naming/atomic commits)
+    │   └── security.md               # Security rules (secrets/input validation/dependency safety)
     ├── skills/
     │   ├── _template/                 # Skill template
     │   ├── tdd/SKILL.md               # Built-in: TDD (enforced via constitution)
@@ -162,10 +179,13 @@ Configured as Claude Code Hook: Edit → Auto-lint → Failure → Error feedbac
 | Feature | claude-flow | Vanilla Claude Code | Superpower-style |
 |---------|-------------|---------------------|------------------|
 | Project cognition | 4-layer (Constitution→Commands) | Flat CLAUDE.md | Constitution + Rules (no Skills) |
+| Agent collaboration | 3 specialized Agents (feature builder / code reviewer / test writer) | No built-in templates | None |
+| Protective hooks | File protection + lint feedback + post-compact context recovery | One-way Hooks | None |
+| Code review standards | REVIEW.md template (3 dimensions × 3 levels) | None | None |
+| CI/CD template | GitHub Actions (build/test + AI review) | None | None |
 | Budget control | `--max-budget-usd` real cost tracking + circuit-break | None | None |
 | Autonomous engine | 8-layer `/deep-task` (DAG→Parallel Agents→Verification→Meta-learning) | None | None |
 | One-click init | `/init-project` auto-analysis | None | Manual config |
-| Lint feedback | Bidirectional (edit→lint→auto-fix→re-lint) | One-way Hooks | None |
 | Cross-session persistence | Atomic DAG scheduling + WIP + cost tracking | None | None |
 | Verification | 3-level + multi-Agent adversarial loop (Reviewer↔Executor convergence) | None | None |
 | Built-in TDD | Enforced via constitution | No | No |
