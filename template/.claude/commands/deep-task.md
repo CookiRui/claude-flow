@@ -7,9 +7,32 @@ argument-hint: <goal description>
 
 Autonomous execution engine. Classifies complexity, decomposes into DAG, executes in parallel with Agent tool, verifies at three levels, and captures learnings.
 
-## Phase 0: Complexity Classification
+## Phase 0: Goal Clarity Gate (ALL tasks, before classification)
 
-Classify the goal before doing anything else:
+Before classifying complexity, assess whether the goal is clear enough to act on:
+
+1. **Scope check**: Is it clear what is included and what is excluded?
+2. **Done criteria**: Can you determine when this is "done"?
+3. **Ambiguity check**: Are there terms, requirements, or constraints that could be interpreted multiple ways?
+
+| Confidence | Action |
+|-----------|--------|
+| ≥ 0.8 | Proceed to complexity classification |
+| 0.5–0.8 | State your assumptions, notify user, then proceed |
+| < 0.5 | `AskUserQuestion` — list specific questions and default assumptions. **Do NOT proceed until user responds.** |
+
+**Format when asking:**
+> I need clarification before starting:
+> 1. {Question} (default: {assumption})
+> 2. {Question} (default: {assumption})
+>
+> Reply with answers, or "go" to accept defaults.
+
+---
+
+## Phase 0.5: Complexity Classification
+
+Classify the goal:
 
 | Question | Yes | No |
 |----------|-----|----|
@@ -47,7 +70,6 @@ Output your classification and reasoning.
 
 2. **Assess feasibility**:
    - Is the goal physically possible?
-   - Is it clear enough to decompose? If ambiguous → `AskUserQuestion` to clarify.
    - Are there hidden tradeoffs? If yes → notify user.
    - Confidence < 0.3 → present options and let user decide direction.
 

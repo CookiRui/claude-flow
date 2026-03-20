@@ -433,6 +433,41 @@ def run_claude_session(
 # DAG Planning
 # ============================================================
 
+def build_clarify_prompt(goal: str) -> str:
+    """Build a prompt asking Claude to evaluate whether the goal is clear enough to execute."""
+    return f"""You are a task evaluator. Assess whether the following goal is clear enough to be decomposed into executable sub-tasks.
+
+Goal: {goal}
+
+Evaluate these dimensions:
+1. **Scope**: Is it clear what is included and excluded?
+2. **Acceptance criteria**: Can you determine when this is "done"?
+3. **Technical approach**: Is there enough context to choose an implementation strategy?
+4. **Ambiguities**: Are there terms, requirements, or constraints that could be interpreted multiple ways?
+
+Output your assessment as JSON inside a ```json code fence:
+```json
+{{
+  "clear": true/false,
+  "confidence": 0.0-1.0,
+  "questions": [
+    "Question 1 that needs user clarification",
+    "Question 2 ..."
+  ],
+  "assumptions": [
+    "If no clarification: I would assume X",
+    "If no clarification: I would assume Y"
+  ]
+}}
+```
+
+Rules:
+- "clear" = true ONLY if confidence >= 0.8 AND no blocking questions exist.
+- "questions" should contain ONLY questions where the answer materially changes the implementation approach. Do NOT ask trivial or obvious questions.
+- "assumptions" should list what you would default to if the user doesn't answer. This lets the user decide whether the assumptions are acceptable.
+- If the goal is already detailed with clear acceptance criteria, set clear=true and leave questions empty."""
+
+
 def build_plan_prompt(goal: str) -> str:
     """Build a prompt asking Claude to analyze the goal and output a JSON DAG."""
     return f"""Analyze the following goal and break it down into a set of sub-tasks.
@@ -513,6 +548,83 @@ def parse_dag_response(response: str) -> TaskDAG:
             files=[],
         )
         return TaskDAG([fallback])
+
+
+def clarify_goal(goal: str, budget: BudgetTracker) -> str:
+    """Evaluate whether the goal is clear enough; ask user for clarification if needed.
+
+    Returns the (possibly refined) goal string. If the goal is already clear,
+    returns it unchanged.
+    """
+    print("  [Clarify] Evaluating goal clarity...")
+    prompt = build_clarify_prompt(goal)
+    session = run_claude_session(prompt, budget_usd=budget.next_task_budget())
+    budget.record("clarification", session["cost_usd"])
+
+    output = session["output"]
+    try:
+        match = re.search(r"```json\s*([\s\S]*?)\s*```", output)
+        if not match:
+            raise ValueError("No JSON in clarification response")
+        assessment = json.loads(match.group(1))
+    except Exception:
+        print("  [Clarify] Could not parse assessment, proceeding with original goal.")
+        return goal
+
+    confidence = assessment.get("confidence", 1.0)
+    is_clear = assessment.get("clear", True)
+    questions = assessment.get("questions", [])
+    assumptions = assessment.get("assumptions", [])
+
+    print(f"  [Clarify] Confidence: {confidence:.1f} | Clear: {is_clear}")
+
+    if is_clear and not questions:
+        print("  [Clarify] Goal is clear. Proceeding to planning.")
+        return goal
+
+    # --- Goal is ambiguous — ask user ---
+    print(f"\n{'='*60}")
+    print("GOAL CLARIFICATION NEEDED")
+    print(f"{'='*60}")
+    print(f"\nGoal: {goal}\n")
+
+    if questions:
+        print("Questions:")
+        for i, q in enumerate(questions, 1):
+            print(f"  {i}. {q}")
+
+    if assumptions:
+        print("\nDefault assumptions (if you skip):")
+        for a in assumptions:
+            print(f"  - {a}")
+
+    print(f"\nOptions:")
+    print(f"  - Answer the questions above to refine the goal")
+    print(f"  - Press Enter to accept default assumptions and proceed")
+    print(f"  - Type 'q' to abort")
+    print()
+
+    try:
+        user_input = input("Your clarification (or Enter to skip): ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print("\n  [Clarify] No TTY or interrupted. Proceeding with assumptions.")
+        return goal
+
+    if user_input.lower() == "q":
+        print("  [Clarify] Aborted by user.")
+        sys.exit(0)
+
+    if user_input:
+        # Append user's clarification to the goal
+        goal = f"{goal}\n\nUser clarification:\n{user_input}"
+        print(f"  [Clarify] Goal refined with user input.")
+    else:
+        if assumptions:
+            assumptions_text = "\n".join(f"- {a}" for a in assumptions)
+            goal = f"{goal}\n\nAssumptions (accepted by user):\n{assumptions_text}"
+            print(f"  [Clarify] Proceeding with default assumptions.")
+
+    return goal
 
 
 def plan_dag(goal: str, budget: BudgetTracker) -> TaskDAG:
@@ -647,6 +759,7 @@ def persistent_solve(
     max_budget_usd: float = 5.0,
     per_task_budget_usd: float = 0.5,
     mode: str = "dag",
+    skip_clarify: bool = False,
 ):
     """Main persistent loop logic.
 
@@ -670,7 +783,7 @@ def persistent_solve(
     print(f"{'='*60}")
 
     if mode == "dag":
-        _run_dag_mode(goal, max_rounds, max_time, budget, start_time)
+        _run_dag_mode(goal, max_rounds, max_time, budget, start_time, skip_clarify)
     else:
         _run_legacy_mode(goal, max_rounds, max_time, budget, start_time)
 
@@ -688,9 +801,15 @@ def _run_dag_mode(
     max_time: int,
     budget: BudgetTracker,
     start_time: float,
+    skip_clarify: bool = False,
 ):
     """DAG mode: plan once, execute sub-tasks atomically with budget control."""
     original_goal = goal
+
+    # Phase 0: Clarify goal before first round
+    if not skip_clarify:
+        goal = clarify_goal(goal, budget)
+        original_goal = goal
 
     for round_num in range(1, max_rounds + 1):
         elapsed = time.time() - start_time
@@ -878,6 +997,10 @@ def main():
         "--mode", choices=["dag", "legacy"], default="dag",
         help="Execution mode: 'dag' (atomic sub-tasks) or 'legacy' (WIP handshake) (default: dag)"
     )
+    parser.add_argument(
+        "--no-clarify", action="store_true",
+        help="Skip goal clarification phase and proceed directly to planning"
+    )
 
     args = parser.parse_args()
     persistent_solve(
@@ -887,6 +1010,7 @@ def main():
         max_budget_usd=args.max_budget_usd,
         per_task_budget_usd=args.per_task_budget,
         mode=args.mode,
+        skip_clarify=args.no_clarify,
     )
 
 
