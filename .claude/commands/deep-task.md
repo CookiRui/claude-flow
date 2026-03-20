@@ -7,32 +7,9 @@ argument-hint: <goal description>
 
 Autonomous execution engine. Classifies complexity, decomposes into DAG, executes in parallel with Agent tool, verifies at three levels, and captures learnings.
 
-## Phase 0: Goal Clarity Gate (ALL tasks, before classification)
+## Phase 0: Complexity Classification
 
-Before classifying complexity, assess whether the goal is clear enough to act on:
-
-1. **Scope check**: Is it clear what is included and what is excluded?
-2. **Done criteria**: Can you determine when this is "done"?
-3. **Ambiguity check**: Are there terms, requirements, or constraints that could be interpreted multiple ways?
-
-| Confidence | Action |
-|-----------|--------|
-| ≥ 0.8 | Proceed to complexity classification |
-| 0.5–0.8 | State your assumptions, notify user, then proceed |
-| < 0.5 | `AskUserQuestion` — list specific questions and default assumptions. **Do NOT proceed until user responds.** |
-
-**Format when asking:**
-> I need clarification before starting:
-> 1. {Question} (default: {assumption})
-> 2. {Question} (default: {assumption})
->
-> Reply with answers, or "go" to accept defaults.
-
----
-
-## Phase 0.5: Complexity Classification
-
-Classify the goal:
+Classify the goal before doing anything else:
 
 | Question | Yes | No |
 |----------|-----|----|
@@ -68,22 +45,33 @@ Output your classification and reasoning.
 
 1. **Check for existing WIP**: Read `.claude-flow/wip.md`. If it exists and matches this goal, resume from Phase 3 with the existing DAG.
 
-2. **Assess feasibility**:
+2. **Goal Clarity Gate** (L/XL tasks are complex enough to warrant this):
+   - Is the scope clear (what's included / excluded)?
+   - Can you determine when this is "done"?
+   - Are there ambiguous terms or requirements?
+
+   | Confidence | Action |
+   |-----------|--------|
+   | ≥ 0.8 | Proceed |
+   | 0.5–0.8 | State assumptions, notify user, proceed |
+   | < 0.5 | `AskUserQuestion` with questions + default assumptions. **Wait for response.** |
+
+3. **Assess feasibility**:
    - Is the goal physically possible?
    - Are there hidden tradeoffs? If yes → notify user.
    - Confidence < 0.3 → present options and let user decide direction.
 
-3. **Build context**:
+4. **Build context**:
    - Read constitution (`.claude/constitution.md`)
    - Run `python scripts/repo-map.py --format md --no-refs` if available (generates code map)
    - Load relevant Skills
 
-4. **Plan model routing**:
+5. **Plan model routing**:
    - Editing/simple tasks → `Agent(model="haiku")`
    - Search/analysis tasks → `Agent(model="sonnet")`
    - Architecture decisions → keep in main context (current model)
 
-5. Output: refined goal statement + feasibility assessment.
+6. Output: refined goal statement + feasibility assessment.
    - **XL only**: `AskUserQuestion` — must wait for user confirmation before Phase 2.
 
 ---
