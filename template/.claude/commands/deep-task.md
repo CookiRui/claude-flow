@@ -66,15 +66,27 @@ Output your classification and reasoning.
    - Run `python scripts/repo-map.py --format md --no-refs` if available (generates code map)
    - Load relevant Skills
 
-5. **Read historical learnings**: Read `.claude-flow/learnings.md` if it exists.
-   - Extract pitfalls relevant to this task's domain (e.g., same module, same type of change)
-   - Add as explicit constraints to Phase 2 decomposition ("avoid X because it failed before")
+5. **Read historical learnings**: Read `.claude-flow/learnings/INDEX.md` if it exists.
+   - Identify the domain(s) relevant to this task, read only those domain files (not all)
+   - Extract pitfalls relevant to this task and add as constraints to Phase 2 ("avoid X because it failed before")
    - If a previous task of the same type succeeded, reuse its strategy as the default approach
+   - **Pruning** (run if any domain file has >20 entries or last_pruned >30 days ago):
+     - Remove entries with score ≤ 1
+     - Merge entries with score 2 that share the same pitfall into a single consolidated entry
+     - Update `entry_count` and `last_pruned` in the file header
+     - Update `INDEX.md`
 
-6. **Plan model routing**:
-   - Editing/simple tasks → `Agent(model="haiku")`
-   - Search/analysis tasks → `Agent(model="sonnet")`
-   - Architecture decisions → keep in main context (current model)
+6. **Plan model routing** — based on per-task complexity, not category:
+
+   | Estimated Complexity | Criteria | Model |
+   |---------------------|----------|-------|
+   | 1 (trivial) | Single-file edit, mechanical change, no logic decisions | `haiku` |
+   | 2 (low) | Multi-file edit with clear pattern, simple grep+judge | `haiku` |
+   | 3 (medium) | Logic changes, test writing, analysis requiring reasoning | `sonnet` |
+   | 4 (high) | Cross-module refactor, API design, complex debugging | `sonnet` |
+   | 5 (architectural) | System-wide decisions, tradeoff evaluation | keep in main context |
+
+   Assign a complexity score (1-5) to each sub-task in Phase 2. The score drives model selection automatically — do NOT hard-code model by task type.
 
 7. Output: refined goal statement + feasibility assessment + learnings constraints.
    - **XL only**: `AskUserQuestion` — must wait for user confirmation before Phase 2.
@@ -90,16 +102,18 @@ Each sub-task must have:
 - **Description**: what to do
 - **Acceptance criteria**: machine-verifiable condition (test passes / compiles / behavior observable)
 - **Dependencies**: list of task IDs that must complete first
-- **Model**: `haiku` (edits), `sonnet` (analysis), or `main` (architecture)
+- **Complexity**: 1-5 score (drives model selection per Phase 1 step 6)
 - **Files**: which files to create/modify
 
 Format:
 ```
-- T1: Set up data models → `src/models.py` | Done: types defined, imports work | Deps: none | Model: haiku
-- T2: Implement core logic → `src/service.py` | Done: unit tests pass | Deps: T1 | Model: sonnet
-- T3: Add API endpoint → `src/routes.py` | Done: endpoint responds | Deps: T2 | Model: haiku
-- T4: Integration tests → `tests/` | Done: all tests pass | Deps: T2, T3 | Model: sonnet
+- T1: Set up data models → `src/models.py` | Done: types defined, imports work | Deps: none | C: 1
+- T2: Implement core logic → `src/service.py` | Done: unit tests pass | Deps: T1 | C: 3
+- T3: Add API endpoint → `src/routes.py` | Done: endpoint responds | Deps: T2 | C: 2
+- T4: Integration tests → `tests/` | Done: all tests pass | Deps: T2, T3 | C: 3
 ```
+
+Model is derived from complexity: C:1-2 → haiku, C:3-4 → sonnet, C:5 → main context.
 
 ### Decomposition Pre-Check
 
@@ -132,10 +146,11 @@ while ready_tasks exist:
 
 ### Agent Call Format
 
-For each sub-task, launch:
+For each sub-task, derive model from complexity score and launch:
 ```
+# Model selection: C:1-2 → haiku, C:3-4 → sonnet, C:5 → main context (no Agent)
 Agent(
-  model="{task.model}",
+  model="{model_from_complexity}",
   prompt="Execute this task:\n{task.description}\n\nAcceptance criteria: {task.criteria}\n\nFiles to modify: {task.files}\n\nIMPORTANT:\n- Read the constitution first (.claude/constitution.md)\n- Follow TDD if this involves functional code\n- Only modify the specified files\n- Verify acceptance criteria before finishing"
 )
 ```
@@ -356,21 +371,42 @@ Also append the cost to the learnings entry (Phase 5.1) as:
 - **Cost**: ~${total} ({N} agent calls: haiku × {N}, sonnet × {N})
 ```
 
-### 5.1 Write to project: `.claude-flow/learnings.md`
+### 5.1 Write to project: `.claude-flow/learnings/{domain}.md`
 
-This is the **project-level** learning log, visible to all team members and persisted in git.
+Learnings are split by domain to prevent file bloat and enable targeted retrieval.
 
-If the file doesn't exist, create it with a header. Then **append** a new entry (never overwrite previous entries):
+**Domain classification**: derive from the primary module/area affected (e.g., `auth`, `api`, `data-model`, `ci`, `perf`, `ui`). Use kebab-case. If unsure, use `general`.
+
+**File structure**: each domain file has a YAML header and chronological entries:
 
 ```markdown
-## {date} — {goal summary}
+---
+domain: {domain}
+entry_count: {N}
+last_pruned: {date}
+---
+
+### {date} — {goal summary} [score: {1-5}]
 
 - **Complexity**: estimated {X}, actual {Y}
 - **Strategies that worked**: {list}
 - **Strategies that failed**: {list with reasons}
 - **Pitfalls discovered**: {list}
 - **Verification notes**: L{N} was {sufficient/insufficient}, because {reason}
-- **Time**: {rounds} rounds, {sub-tasks} sub-tasks
+- **Cost**: ~${total} ({N} agent calls)
+```
+
+**Relevance score** (1-5): how likely this learning applies to future tasks in the same domain.
+- 5: Universal pitfall (e.g., "never do X in this module")
+- 4: Reusable strategy pattern
+- 3: Useful context for similar tasks
+- 2: One-off insight, low reuse
+- 1: Marginal, candidate for pruning
+
+**Index file**: maintain `.claude-flow/learnings/INDEX.md` listing all domain files with entry counts:
+```markdown
+- auth.md (3 entries, last: 2026-03-15)
+- api.md (5 entries, last: 2026-03-20)
 ```
 
 ### 5.2 Write to Claude memory: `memory/meta_{domain}.md`
@@ -424,7 +460,7 @@ If the execution revealed a constraint that the constitution or rules don't cove
 
 - Do not skip Phase 0 complexity classification
 - Do not run L/XL tasks through S/M fast path
-- Do not use `Agent(model="opus")` for simple edits (cost waste)
+- Do not override complexity-based model routing (e.g., using sonnet for C:1 tasks or haiku for C:4 tasks)
 - Do not skip L2 verification for L/XL tasks that touch core logic (use Verification Level Selector for exemptions)
 - Do not commit without passing L1 check
 - Do not proceed past XL decomposition without user confirmation
