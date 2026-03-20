@@ -36,9 +36,9 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
+from typing import Optional
 
 # ============================================================
 # Constants
@@ -202,7 +202,7 @@ def ensure_wip_dir():
     os.makedirs(WIP_DIR, exist_ok=True)
 
 
-def read_wip() -> str | None:
+def read_wip() -> Optional[str]:
     """Read WIP file content. Returns None if file doesn't exist."""
     try:
         with open(WIP_FILE, "r", encoding="utf-8") as f:
@@ -211,7 +211,7 @@ def read_wip() -> str | None:
         return None
 
 
-def parse_wip_status(wip_content: str | None) -> str:
+def parse_wip_status(wip_content: Optional[str]) -> str:
     """Parse the status field from WIP file.
 
     Returns: 'done', 'need_human', 'active', or 'unknown'
@@ -233,7 +233,7 @@ def parse_wip_status(wip_content: str | None) -> str:
     return "unknown"
 
 
-def count_completed_tasks(wip_content: str | None) -> int:
+def count_completed_tasks(wip_content: Optional[str]) -> int:
     """Count [x] items in WIP to track progress."""
     if not wip_content:
         return 0
@@ -374,7 +374,7 @@ def _parse_claude_json(raw: str) -> dict:
 def run_claude_session(
     prompt: str,
     timeout: int = 1800,
-    budget_usd: float | None = None,
+    budget_usd: Optional[float] = None,
 ) -> dict:
     """Launch a Claude Code session and return a structured result dict.
 
@@ -598,10 +598,10 @@ def clarify_goal(goal: str, budget: BudgetTracker) -> str:
         for a in assumptions:
             print(f"  - {a}")
 
-    print(f"\nOptions:")
-    print(f"  - Answer the questions above to refine the goal")
-    print(f"  - Press Enter to accept default assumptions and proceed")
-    print(f"  - Type 'q' to abort")
+    print("\nOptions:")
+    print("  - Answer the questions above to refine the goal")
+    print("  - Press Enter to accept default assumptions and proceed")
+    print("  - Type 'q' to abort")
     print()
 
     try:
@@ -617,12 +617,12 @@ def clarify_goal(goal: str, budget: BudgetTracker) -> str:
     if user_input:
         # Append user's clarification to the goal
         goal = f"{goal}\n\nUser clarification:\n{user_input}"
-        print(f"  [Clarify] Goal refined with user input.")
+        print("  [Clarify] Goal refined with user input.")
     else:
         if assumptions:
             assumptions_text = "\n".join(f"- {a}" for a in assumptions)
             goal = f"{goal}\n\nAssumptions (accepted by user):\n{assumptions_text}"
-            print(f"  [Clarify] Proceeding with default assumptions.")
+            print("  [Clarify] Proceeding with default assumptions.")
 
     return goal
 
@@ -774,7 +774,7 @@ def persistent_solve(
     budget = BudgetTracker(max_budget_usd, per_task_budget_usd)
 
     print(f"{'='*60}")
-    print(f"Persistent loop started")
+    print("Persistent loop started")
     print(f"Goal: {goal}")
     print(f"Mode: {mode}")
     print(f"Max rounds: {max_rounds} | Max time: {max_time}s")
@@ -789,7 +789,7 @@ def persistent_solve(
 
     # Final summary
     print(f"\n{'='*60}")
-    print(f"Final budget summary:")
+    print("Final budget summary:")
     print(f"  {budget.summary()}")
     print(f"  Total time: {int(time.time() - start_time)}s")
     print(f"{'='*60}")
@@ -856,7 +856,7 @@ def _run_dag_mode(
                 for t in failed
             )
             goal = f"{goal}\n\nPrevious attempt had failures:\n{fail_ctx}\nPlease adjust approach."
-            print(f"  Rebuilding DAG with failure context for next round...")
+            print("  Rebuilding DAG with failure context for next round...")
 
         if pending:
             # Budget ran out mid-DAG — stop, user can re-run
@@ -891,7 +891,7 @@ def _run_legacy_mode(
             print(f"\n[CIRCUIT BREAKER] {MAX_CONSECUTIVE_NO_PROGRESS} consecutive rounds with no progress. Stopping.")
             break
         if not budget.can_afford():
-            print(f"\n[CIRCUIT BREAKER] Budget exhausted. Stopping.")
+            print("\n[CIRCUIT BREAKER] Budget exhausted. Stopping.")
             break
 
         remaining_time = int(max_time - elapsed)
@@ -928,7 +928,7 @@ def _run_legacy_mode(
         else:
             if wip_after and wip_after != wip_content:
                 no_progress_count = 0
-                print(f"  WIP updated (content changed)")
+                print("  WIP updated (content changed)")
             else:
                 no_progress_count += 1
                 print(f"  [WARNING] No visible progress ({no_progress_count} consecutive)")
@@ -953,7 +953,7 @@ def _run_legacy_mode(
             return
 
         if session["stop_reason"] == "timeout" or "[TIMEOUT]" in output_text:
-            print(f"  Round timed out. WIP may not be saved.")
+            print("  Round timed out. WIP may not be saved.")
 
         if "[GOAL_ACHIEVED]" in output_text and wip_status != "done":
             print(f"\n{'='*60}")

@@ -191,10 +191,10 @@ def format_json(repo_map: dict) -> str:
 
 def format_markdown(repo_map: dict) -> str:
     lines = [
-        f"# Repo Map",
-        f"",
+        "# Repo Map",
+        "",
         f"Files: {repo_map['total_files']} | Symbols: {repo_map['total_symbols']}",
-        f"",
+        "",
     ]
 
     # Group by file

@@ -12,7 +12,6 @@ Remote usage (no clone needed):
 """
 
 import argparse
-import os
 import shutil
 import sys
 from pathlib import Path
@@ -67,7 +66,6 @@ def find_source_dir() -> Path:
 def install(target: Path, source: Path, force: bool = False):
     """Install claude-flow files to the target directory."""
     template_dir = source / "template"
-    scripts_dir = source / "scripts"
 
     if not template_dir.is_dir():
         print(f"Error: template directory not found at {template_dir}")
