@@ -1,11 +1,13 @@
 ---
 description: Analyze the codebase and auto-generate all claude-flow configuration files
-argument-hint: [project description]
+argument-hint: [project description] [--lang en]
 ---
 
 # /init-project
 
 Automatically analyze the current codebase and generate all claude-flow configuration files. The user should NOT need to fill any placeholders manually.
+
+**Language:** All generated file content (CLAUDE.md, constitution, rules, REVIEW.md, etc.) must be written in **Chinese (中文) by default**. If the user passes `--lang en` as an argument, use English instead.
 
 ## Phase 0: Detect Project State
 
