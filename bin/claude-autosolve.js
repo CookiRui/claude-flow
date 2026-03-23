@@ -85,9 +85,17 @@ function copyTree(srcDir, targetDir, installed) {
   }
 }
 
-function init(targetDir, force, preset) {
+function init(targetDir, force, preset, lang) {
   const sourceDir = path.resolve(__dirname, "..");
-  const templateDir = path.join(sourceDir, "template");
+  let templateDir = path.join(sourceDir, "template");
+  if (lang === "cn") {
+    const cnDir = path.join(sourceDir, "template-cn");
+    if (fs.existsSync(cnDir)) {
+      templateDir = cnDir;
+    } else {
+      console.log("Warning: Chinese template not found, falling back to English.");
+    }
+  }
   const target = path.resolve(targetDir);
 
   if (!fs.existsSync(target) || !fs.statSync(target).isDirectory()) {
@@ -101,7 +109,8 @@ function init(targetDir, force, preset) {
     process.exit(1);
   }
 
-  console.log(`\nInstalling claude-autosolve to: ${target}\n`);
+  const langLabel = lang === "cn" ? " (中文)" : "";
+  console.log(`\nInstalling claude-autosolve${langLabel} to: ${target}\n`);
 
   const installed = [];
   const skipped = [];
@@ -188,11 +197,13 @@ Usage:
 Options:
   --force, -f          Overwrite existing files
   --preset <name>      Apply engine preset (${AVAILABLE_PRESETS.join(", ")})
+  --lang <en|cn>       Template language (default: en)
   --help, -h           Show this help message
 
 Examples:
   npx claude-autosolve init                       Install core to current directory
   npx claude-autosolve init --preset unity         Install core + Unity preset
+  npx claude-autosolve init --lang cn              Install with Chinese templates
   npx claude-autosolve init ./my-project --force   Install to specified directory
 `);
 }
@@ -225,9 +236,21 @@ function main() {
     }
   }
 
+  // Parse --lang value
+  let lang = "en";
+  const langIdx = args.indexOf("--lang");
+  if (langIdx !== -1 && args[langIdx + 1]) {
+    lang = args[langIdx + 1];
+    if (!["en", "cn"].includes(lang)) {
+      console.error(`Error: unknown lang '${lang}'. Available: en, cn`);
+      process.exit(1);
+    }
+  }
+
   if (command === "init") {
-    const targetDir = positional.filter(p => p !== preset)[1] || process.cwd();
-    init(targetDir, force, preset);
+    const paramValues = [preset, lang].filter(Boolean);
+    const targetDir = positional.filter(p => !paramValues.includes(p))[1] || process.cwd();
+    init(targetDir, force, preset, lang);
   } else {
     console.error(`Unknown command: ${command}`);
     printHelp();

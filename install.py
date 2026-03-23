@@ -7,6 +7,7 @@ Usage:
     python install.py /path/to/project             # Install to specified directory
     python install.py --preset unity               # Force Unity preset on root (skip auto-detect)
     python install.py --force                      # Overwrite existing files
+    python install.py --lang cn                    # Install Chinese (中文) templates
 
 Auto-detection:
     The installer scans first-level subdirectories for known project types.
@@ -23,6 +24,7 @@ import sys
 from pathlib import Path
 
 AVAILABLE_PRESETS = ["unity"]
+AVAILABLE_LANGS = ["en", "cn"]
 
 # Preset auto-detection rules: preset_name -> detector function
 PRESET_DETECTORS = {
@@ -108,9 +110,16 @@ def copy_tree(src_dir: Path, target: Path, force: bool, installed: list, skipped
         installed.append(str(rel))
 
 
-def install_core(target: Path, source: Path, force: bool = False):
+def install_core(target: Path, source: Path, force: bool = False, lang: str = "en"):
     """Install core claude-flow files to the target directory."""
-    template_dir = source / "template"
+    if lang == "cn":
+        template_dir = source / "template-cn"
+        if not template_dir.is_dir():
+            print(f"Error: Chinese template not found at {template_dir}")
+            print("Falling back to English template.")
+            template_dir = source / "template"
+    else:
+        template_dir = source / "template"
 
     if not template_dir.is_dir():
         print(f"Error: template directory not found at {template_dir}")
@@ -216,6 +225,12 @@ def main():
         action="store_true",
         help="Skip auto-detection of subdirectory project types",
     )
+    parser.add_argument(
+        "--lang",
+        choices=AVAILABLE_LANGS,
+        default="en",
+        help="Template language: en (English, default) or cn (Chinese/中文)",
+    )
 
     args = parser.parse_args()
     target = Path(args.target).resolve()
@@ -226,8 +241,9 @@ def main():
         print(f"Created directory: {target}")
 
     # Step 1: Install core to root
-    print(f"[core] Installing claude-flow to: {target}")
-    core_installed, core_skipped = install_core(target, source, force=args.force)
+    lang_label = " (中文)" if args.lang == "cn" else ""
+    print(f"[core] Installing claude-flow{lang_label} to: {target}")
+    core_installed, core_skipped = install_core(target, source, force=args.force, lang=args.lang)
     print_results("core", core_installed, core_skipped, target)
 
     # Step 2: Apply preset

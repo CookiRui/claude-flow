@@ -1,0 +1,159 @@
+# CI/CD 工作流模板
+# ========================
+# 本文件是一个起始模板。搜索所有 {placeholder} 标记并替换。
+#
+# 需要替换的内容：
+#   {language-runtime}  — 例：actions/setup-node、actions/setup-python、actions/setup-go
+#   {language-version}  — 例："20"、"3.11"、"1.21"
+#   {install-command}   — 例："npm ci"、"pip install -r requirements.txt"、"go mod download"
+#   {build-command}     — 例："npm run build"、"python -m build"，如不适用可删除该步骤
+#   {lint-command}      — 例："npm run lint"、"ruff check ."、"golangci-lint run"
+#   {test-command}      — 例："npm test"、"pytest"、"go test ./..."
+#
+# 需要配置的 GitHub Secrets（Settings → Secrets and variables → Actions）：
+#   ANTHROPIC_API_KEY   — AI 代码审查任务所需（从 console.anthropic.com 获取）
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  # ─────────────────────────────────────────────
+  # 任务 1：构建、Lint 检查与测试
+  # ─────────────────────────────────────────────
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 将 {language-runtime} 替换为对应的 setup action，例如：
+      #   actions/setup-node   → Node.js
+      #   actions/setup-python → Python
+      #   actions/setup-go     → Go
+      #   actions/setup-java   → Java（需设置 distribution: 'temurin'）
+      - name: Set up {language-runtime}
+        uses: {language-runtime}@v4
+        with:
+          # 将 {language-version} 替换为项目所需的版本字符串。
+          # 示例："20"（Node LTS）、"3.11"（Python）、"1.21"（Go）
+          node-version: "{language-version}"   # 根据运行时重命名此键（例：python-version、go-version）
+
+      - name: Install dependencies
+        # 将 {install-command} 替换为包管理器的安装命令。
+        # 示例："npm ci"、"pip install -r requirements.txt"、"go mod download"
+        run: {install-command}
+
+      - name: Build
+        # 将 {build-command} 替换为构建命令。
+        # 如果项目没有显式构建步骤，请删除此步骤。
+        # 示例："npm run build"、"python -m build"、"go build ./..."
+        run: {build-command}
+
+      - name: Lint
+        # 将 {lint-command} 替换为 lint 检查命令。
+        # 示例："npm run lint"、"ruff check ."、"golangci-lint run"、"eslint ."
+        run: {lint-command}
+
+      - name: Test
+        # 将 {test-command} 替换为测试运行命令。
+        # 示例："npm test"、"pytest --tb=short"、"go test ./..."
+        run: {test-command}
+
+  # ─────────────────────────────────────────────
+  # 任务 2：AI 代码审查（仅 pull_request 触发）
+  # ─────────────────────────────────────────────
+  # 本任务使用 Claude Code 的无头模式审查 PR diff。
+  # 如果存在 REVIEW.md，会读取其中的项目审查标准，
+  # 然后将审查结果作为 PR 评论发布。
+  #
+  # 前置条件：
+  #   1. 在仓库 Secrets 中添加 ANTHROPIC_API_KEY。
+  #   2. 可选：在仓库根目录创建 REVIEW.md 文件以指导审查。
+  #      参考：https://github.com/CookiRui/claude-flow
+  #
+  # 如需禁用此任务，直接删除或注释掉即可。
+  ai-review:
+    name: AI Code Review
+    runs-on: ubuntu-latest
+    # 仅在 pull request 时运行（不在直接推送到 main/master 时运行）
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read        # 读取仓库内容
+      pull-requests: write  # 发布审查评论
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # 拉取完整历史记录，以便 Claude 能正确计算 diff
+          fetch-depth: 0
+
+      - name: Set up Node.js (for Claude Code CLI)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Run AI Code Review
+        id: ai_review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 获取 PR 的 git diff
+          git fetch origin ${{ github.base_ref }}
+          DIFF=$(git diff origin/${{ github.base_ref }}...HEAD -- . ':(exclude)package-lock.json' ':(exclude)*.lock' | head -c 20000)
+
+          # 组装审查提示词
+          REVIEW_STANDARDS=""
+          if [ -f "REVIEW.md" ]; then
+            REVIEW_STANDARDS=$(cat REVIEW.md)
+          fi
+
+          PROMPT="You are performing a code review on a pull request.
+
+          $([ -n "$REVIEW_STANDARDS" ] && echo "## Project Review Standards
+          $REVIEW_STANDARDS
+
+          ")## PR Diff
+          \`\`\`diff
+          $DIFF
+          \`\`\`
+
+          Please review this diff and provide:
+          1. A brief summary of what the changes do
+          2. Any bugs, logic errors, or security concerns
+          3. Code quality and style observations
+          4. Suggestions for improvement (optional)
+
+          Be concise and constructive. Focus on issues that matter."
+
+          # 以无头（非交互）模式运行 Claude Code，仅使用只读工具
+          REVIEW=$(claude --headless \
+            --allowedTools "Read,Glob,Grep" \
+            --print \
+            "$PROMPT" 2>&1 || echo "AI review could not be completed.")
+
+          # 使用 python 构建合法的 JSON body（避免 shell 转义问题）
+          BODY=$(printf "## AI Code Review\n\n%s" "$REVIEW" | python3 -c "import sys, json; print(json.dumps({'body': sys.stdin.read()}))")
+
+          # 通过 GitHub API 将审查结果作为 PR 评论发布
+          curl -s -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            -d "$BODY" \
+            || echo "Warning: could not post PR comment (check GITHUB_TOKEN permissions)."

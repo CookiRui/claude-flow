@@ -1,0 +1,42 @@
+# 构建产物
+build/
+dist/
+bin/
+obj/
+out/
+
+# 依赖
+node_modules/
+vendor/
+packages/
+
+# 大型资源文件（游戏项目可取消注释）
+# Assets/Bundles/
+# Assets/StreamingAssets/
+# *.asset
+# *.prefab
+# *.unity
+# *.fbx
+# *.png
+# *.jpg
+# *.wav
+# *.mp3
+
+# 生成的代码
+gen/
+*_generated.*
+*.designer.cs
+
+# IDE
+.idea/
+.vs/
+*.suo
+*.user
+
+# 日志和临时文件
+*.log
+*.tmp
+*.bak
+
+# 持久循环运行时状态（WIP 是临时性的）
+.claude-flow/wip.md
