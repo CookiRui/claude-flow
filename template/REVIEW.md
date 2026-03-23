@@ -29,6 +29,21 @@
 
 > Add project-specific performance rules: `{performance-rule-project-specific}`
 
+### Unity / C# Performance Rules (if applicable)
+
+| ID | Severity | Rule | Example / Notes |
+|---|---|---|---|
+| PERF-U1 | BLOCKER | No heap allocations in hot paths (Update/FixedUpdate/LateUpdate and their call chains) | `new List<T>()`, boxing, closures/lambdas that capture variables |
+| PERF-U2 | BLOCKER | No LINQ in Update-family methods | `.Where()`, `.Select()`, `.ToList()`, `.Any()` all allocate |
+| PERF-U3 | BLOCKER | No string operations in hot paths | `string.Format`, `$""`, `+` concatenation, `.ToString()` |
+| PERF-U4 | BLOCKER | No GetComponent in Update-family methods | Cache in `Awake()`/`Start()` instead |
+| PERF-U5 | BLOCKER | Use `CompareTag()` instead of `gameObject.tag ==` | `.tag` allocates a new string every call |
+| PERF-U6 | WARNING | Cache component references; avoid repeated `Find`/`GetComponent` calls | Store in a private field during initialization |
+| PERF-U7 | WARNING | Use object pooling for frequently instantiated/destroyed objects | `Instantiate()`/`Destroy()` cause GC pressure and frame spikes |
+| PERF-U8 | WARNING | Avoid `foreach` on non-generic `IEnumerable` | Causes implicit boxing allocation per iteration |
+| PERF-U9 | WARNING | Cache `YieldInstruction` objects in coroutines | `new WaitForSeconds()` every frame wastes memory |
+| PERF-U10 | SUGGESTION | Prefer `sqrMagnitude` over `magnitude` for distance comparisons | Avoids expensive square root calculation |
+
 ---
 
 ## Dimension B: Maintainability
@@ -143,6 +158,22 @@ Fill in this section during project initialization or the first review cycle.
 - [ ] {tech-specific-check-1}
 - [ ] {tech-specific-check-2}
 - [ ] {tech-specific-check-3}
+
+**Unity / C# checklist (if applicable):**
+
+- [ ] No `GetComponent` calls inside `Update`/`FixedUpdate`/`LateUpdate` — all cached in `Awake()`/`Start()`
+- [ ] No LINQ, `new` reference types, or string operations in hot paths
+- [ ] `CompareTag()` used instead of `gameObject.tag == "..."`
+- [ ] Inspector fields use `[SerializeField] private`, not `public`
+- [ ] Every new file under `Assets/` has a corresponding `.meta` file
+- [ ] Deleted files have their `.meta` files deleted too
+- [ ] MonoBehaviour filename matches class name
+- [ ] Namespace matches the `Scripts/` subdirectory structure: `{project-namespace}.<Feature>`
+- [ ] Assembly Definition dependencies point in the correct direction (no circular refs)
+- [ ] `OnDestroy()` unsubscribes from events and cleans up resources
+- [ ] No `UnityEngine.Input` used directly — input goes through the project's input abstraction
+- [ ] Object pooling used for frequently instantiated/destroyed objects
+- [ ] Coroutines cache `YieldInstruction` objects (no `new WaitForSeconds()` per frame)
 
 ---
 

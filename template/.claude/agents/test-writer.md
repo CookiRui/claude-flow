@@ -85,6 +85,101 @@ For every numeric input, collection size, string length, or similar bounded valu
 
 ---
 
+## Unity-Specific Test Categories
+
+When testing a Unity (C#) project, apply the following additional categories. These supplement the generic categories above.
+
+### Unity EditMode Tests (NUnit)
+
+EditMode tests run in the Unity Editor without entering Play mode. They are fast and suitable for pure logic testing.
+
+- **Framework**: NUnit (`[Test]`, `[TestFixture]`)
+- **Assembly Definition**: `{project-namespace}.Tests.Editor`
+- **Test directory**: `{unity-project-path}/Assets/Scripts/Tests/Editor/`
+- **Run command**: `bash .claude/scripts/unity-editmode-test.sh`
+- **Naming**: `<TargetClass>Tests`, methods: `<Method>_<Scenario>_<ExpectedResult>`
+
+```csharp
+namespace {project-namespace}.Tests
+{
+    [TestFixture]
+    public class InventorySystemTests
+    {
+        [Test]
+        public void AddItem_WhenFull_ReturnsOverflow()
+        {
+            // Arrange - Act - Assert
+        }
+
+        [Test]
+        public void RemoveItem_WithZeroCount_ThrowsArgumentException()
+        {
+            // Adversarial: zero where positive expected
+        }
+    }
+}
+```
+
+Use EditMode tests for:
+- Data model logic (inventory, stats, config parsing)
+- State machine transitions
+- Event system publish/subscribe correctness
+- Serialization round-trips
+- Math/utility functions
+
+### Unity PlayMode Tests (AutoTest JSON)
+
+PlayMode tests run the actual game loop. Use the AutoTest framework (see `autotest` Skill) to drive them via JSON test cases.
+
+- **Run command**: `bash .claude/scripts/unity-game-test.sh smoke --scene {default-test-scene-path}`
+- **Test case directory**: `{test-cases-path}/`
+- **Format**: JSON (see `autotest` Skill for schema)
+
+Use PlayMode tests for:
+- Player movement and physics interactions
+- UI flow (menu navigation, dialog sequences)
+- Cross-system integration (input → gameplay → UI feedback)
+- Scene loading and transitions
+
+### Unity Performance Tests
+
+Performance tests verify that code meets frame budget and memory constraints. No GC allocations allowed in Update-family methods.
+
+```csharp
+[Test]
+public void Update_WithMaxEntities_CompletesWithinFrameBudget()
+{
+    // 16ms frame budget for 60fps target
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    system.SimulateUpdate(maxEntityCount);
+    sw.Stop();
+    Assert.Less(sw.ElapsedMilliseconds, 16, "Exceeded frame budget");
+}
+
+[Test]
+public void Update_DoesNotAllocateGC()
+{
+    // Warm up
+    system.SimulateUpdate(typicalEntityCount);
+
+    // Measure
+    var before = GC.GetTotalMemory(false);
+    for (int i = 0; i < 1000; i++)
+        system.SimulateUpdate(typicalEntityCount);
+    var after = GC.GetTotalMemory(false);
+
+    Assert.AreEqual(before, after, "Update caused GC allocations");
+}
+```
+
+Performance test targets:
+- Frame budget: `< 16ms` per system update (60fps target)
+- GC allocations: `0 bytes` in hot-path methods
+- Object pool efficiency: no `Instantiate`/`Destroy` during gameplay loops
+- Memory growth: bounded over 10,000 frames of continuous operation
+
+---
+
 ## Writing Rules
 
 - Each test must have a **descriptive name** that explains what scenario it covers and what the expected behavior is.

@@ -32,6 +32,7 @@ set -euo pipefail
 # Add patterns that should never be auto-modified (glob-style prefix match).
 HARD_PROTECTED=(
     "{protected-config-dir}"     # e.g. "ProjectSettings/"
+    "ProjectSettings/"           # Unity project settings — edit in Unity Editor only
     ".env"
     ".env.local"
     ".env.production"
@@ -41,9 +42,13 @@ HARD_PROTECTED=(
 # Add patterns for generated/derived artefacts that are risky to hand-edit.
 SOFT_PROTECTED=(
     "{protected-generated-dir}"  # e.g. "build/" or "dist/"
+    "Library/"                   # Unity Library cache — never hand-edit
+    "Temp/"                      # Unity temp files — never hand-edit
+    "Logs/"                      # Unity log output
     "node_modules/"
     "__pycache__/"
     "*.lock"
+    "*.asset"                    # Root-level .asset files (ScriptableObject singletons, etc.)
 )
 
 # ---------------------------------------------------------------------------
