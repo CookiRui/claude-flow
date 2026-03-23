@@ -79,7 +79,13 @@ def classify_complexity(goal: str) -> str:
 python scripts/repo-map.py /path/to/project
 ```
 
-主 Agent 用 **Opus**，子 Agent 按类型选：编辑类 → `Agent(model="haiku")`，搜索/分析 → `Agent(model="sonnet")`，对抗验证 → `Agent(model="sonnet")`
+主 Agent 用 **Opus**，子 Agent 按复杂度评分路由（DAG 分解时为每个子任务标注 C:1-5）：
+
+| 复杂度评分 | 含义 | 路由模型 |
+|-----------|------|---------|
+| C:1-2 | trivial/low（重命名、格式化、简单编辑） | `Agent(model="haiku")` |
+| C:3-4 | medium/high（逻辑修改、搜索分析、对抗验证） | `Agent(model="sonnet")` |
+| C:5 | architectural（架构决策、跨模块重构） | 留在主上下文由 Opus 处理 |
 
 **Step 0**: 目标审查 → **Step 1**: DAG 分解 + 预检 → **Step 2**: 并行执行 → **Step 3**: 三级验证 → **Step 4**: 元学习
 
@@ -208,12 +214,35 @@ python scripts/repo-map.py /path/to/project --no-refs # 大项目跳过引用计
 | S 级：简单编辑      | Haiku           | Opus 的 **1/60** |
 | M 级：标准开发      | Sonnet          | Opus 的 **1/5**  |
 | L/XL 级：架构规划   | Opus            | 基准             |
-| 子任务：编辑类      | Sonnet 或 Haiku | 大幅降低         |
+| 子任务 C:1-2        | Haiku           | Opus 的 **1/60** |
+| 子任务 C:3-4        | Sonnet          | Opus 的 **1/5**  |
+| 子任务 C:5          | Opus（主上下文） | 基准             |
 
 ```python
-# Claude Code 落地
-# Agent(model="sonnet", prompt="Execute edit: ...")
-# Agent(model="haiku", prompt="Rename variable: ...")
+# Claude Code 落地：DAG 分解时标注复杂度评分
+# subtask = {"name": "rename var", "complexity": 1}  → Agent(model="haiku")
+# subtask = {"name": "refactor module", "complexity": 4}  → Agent(model="sonnet")
+# subtask = {"name": "redesign arch", "complexity": 5}  → 主上下文处理
+```
+
+### 预算门控
+
+DAG 分解完成后、执行前，基于子任务数量和复杂度评分估算总费用：
+
+| 估算费用 | 行为 |
+|---------|------|
+| ≤$0.50 | 静默执行，不打扰用户 |
+| $0.50-$3.00 | 通知用户预估费用，继续执行 |
+| >$3.00 | 暂停执行，向用户确认是否继续 |
+
+```python
+estimated_cost = sum(cost_by_complexity[t.complexity] for t in dag.tasks)
+if estimated_cost <= 0.50:
+    pass  # proceed silently
+elif estimated_cost <= 3.00:
+    escalate(level=1, notify=f"预估费用 ${estimated_cost:.2f}，继续执行")
+else:
+    escalate(level=2, ask=f"预估费用 ${estimated_cost:.2f}，是否继续？")
 ```
 
 ### 预算策略（已落地）
@@ -287,7 +316,20 @@ Reviewer Agent (sonnet)  ← 审查 diff，提出问题清单
     │ ISSUES ↓
 Executor Agent (sonnet)  ← 修复每个问题，commit
     │
-    └→ 回到 Reviewer，重新审查（最多 3 轮）
+    └→ 回到 Reviewer，重新审查（收敛检测 + 硬上限 3 轮）
+```
+
+**收敛检测规则**（替代固定轮数）：
+
+- 若本轮 blocker 数量 ≥ 上一轮 → 未收敛，**立即停止循环，升级到人类**
+- 同一个 blocker 连续出现 2 轮 → 标记为 `needs-human`，不再尝试自动修复
+- 硬上限仍为 3 轮，防止无限循环
+
+```
+轮次  blocker 数
+ 1      5       → 继续
+ 2      3       → 收敛中，继续
+ 3      1       → PASS 或达到硬上限
 ```
 
 关键路径还可叠加 **测试对抗循环**：Tester Agent 写边界/破坏性测试 → Executor 让测试通过 → Tester 再出新测试 → 循环直到稳定。
@@ -307,7 +349,38 @@ Executor Agent (sonnet)  ← 修复每个问题，commit
 
 ### 元学习 — 越用越聪明
 
-从历史执行轨迹中提炼元策略，存入 `memory/meta_*.md`，让系统自适应不同类型的问题。
+从历史执行轨迹中提炼元策略，双层存储：
+
+- **项目级**：`.claude-flow/learnings/{domain}.md`——按领域分文件，每个文件带 YAML header
+- **Claude 记忆级**：`memory/meta_*.md`——跨项目可复用的元策略
+
+#### Learnings 文件格式
+
+```markdown
+---
+domain: concurrency
+entry_count: 12
+last_pruned: 2026-03-15
+---
+
+- [5] 并行写同一文件必须加锁，否则内容丢失（2026-03-10）
+- [3] ThreadPoolExecutor max_workers=4 在 CI 环境够用（2026-03-08）
+- [1] 某次用 asyncio 但没必要（2026-02-20）
+```
+
+每条 entry 带 **relevance score 1-5**（方括号中的数字）。
+
+#### 自动修剪规则
+
+| 触发条件 | 操作 |
+|---------|------|
+| entry_count > 20 | 删除 score≤1 的条目 |
+| entry_count > 20 | 合并 score=2 的重复/相似条目 |
+| 条目超过 30 天 | 删除 score≤1，降级 score=2→1 |
+
+`.claude-flow/learnings/INDEX.md` 列出所有领域文件及其 entry_count。
+
+让系统自适应不同类型的问题。
 
 元策略影响的决策点：
 
@@ -360,12 +433,13 @@ type: feedback
 | 回滚                | `git revert` / `git checkout`    | 精确回滚到上一个检查点                                   |
 | Lint/Test 反馈闭环  | Hooks + `lint-feedback.sh`       | 编辑 → 自动 lint/test → 失败自动反馈 → AI 自动修         |
 | 对抗验证 (L2)       | `Agent(prompt="as a critic...")` | 独立子 Agent 用边界条件和反例挑战结果                    |
-| 双模型分工          | `Agent(model="sonnet/haiku")`    | 编辑类子任务用 Haiku，标准任务用 Sonnet，规划用 Opus     |
+| 模型路由（复杂度）  | `Agent(model="sonnet/haiku")`    | C:1-2→Haiku, C:3-4→Sonnet, C:5→主上下文 Opus            |
 | 工作记忆            | 对话上下文 + `TaskList`          | Task 工具追踪当前状态                                    |
 | 长期记忆            | `~/.claude/projects/*/memory/`   | 验证过的模式存为 memory 文件                             |
-| 元策略存储          | `memory/meta_*.md`               | 按问题域索引                                             |
+| 元策略存储          | `.claude-flow/learnings/{domain}.md` + `memory/meta_*.md` | 项目级按领域分文件（带 YAML header + relevance score）+ Claude 记忆级 |
 | 分级升级            | `AskUserQuestion`                | 根据信心值选择 Level 0-3                                 |
 | 费用追踪            | `--output-format json` 解析      | 每个子任务精确追踪 cost_usd、input/output tokens         |
+| 预算门控            | DAG 分解后估算                   | ≤$0.50 静默执行, $0.50-$3.00 通知, >$3.00 确认           |
 | 预算熔断            | `BudgetTracker`                  | `--max-budget-usd` 总预算 + `--per-task-budget` 单任务预算 |
 | 断点续传            | WIP 机制（Legacy 模式）          | 预算耗尽/升级时自动保存 WIP 文件                         |
 | 上下文保护          | 子 Agent 隔离 + 检查点摘要       | 重型搜索交给子 Agent，定期生成进度摘要                   |
@@ -388,7 +462,7 @@ type: feedback
 
 ### 任务中断
 
-保存 WIP（轨迹 + 残值 + 剩余任务 + 建议下一步）→ 下次从 WIP 恢复
+保存 WIP（轨迹 + 残值 + 剩余任务 + 建议下一步 + `saved_at_commit` git hash）→ 下次恢复时 Phase 1 先比较 `saved_at_commit` 与当前 HEAD，若不一致则重新评估受影响的子任务
 
 ---
 

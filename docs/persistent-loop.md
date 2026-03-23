@@ -13,6 +13,12 @@
 
 它们是互补的：`/deep-task` 是会话内的执行引擎，`persistent-solve.py` 是会话间的原子化调度器。大多数情况下 `/deep-task` 足够，只有真正超大的任务才需要外层调度。
 
+`/deep-task` 当前具备的能力：
+- **Complexity-based model routing**（C:1-5）— 按复杂度评分选择执行模型
+- **Budget gate** — 执行前预估费用，超出阈值需确认
+- **L2 convergence detection** — 检测子任务收敛，避免无效重试
+- **Domain-split learnings** — 按领域拆分经验，跨任务复用
+
 ---
 
 ## 两种执行模式
@@ -119,17 +125,21 @@ python scripts/persistent-solve.py "Goal" --max-rounds 5 --max-time 3600
     "description": "Set up data models",
     "acceptance_criteria": "Types defined, imports work",
     "dependencies": [],
-    "files": ["src/models.py"]
+    "files": ["src/models.py"],
+    "complexity": 1
   },
   {
     "id": "task-2",
     "description": "Implement core logic",
     "acceptance_criteria": "Unit tests pass",
     "dependencies": ["task-1"],
-    "files": ["src/service.py", "tests/test_service.py"]
+    "files": ["src/service.py", "tests/test_service.py"],
+    "complexity": 3
   }
 ]
 ```
+
+> `complexity` 评分驱动模型选择：1-2 → haiku, 3-4 → sonnet, 5 → main context
 
 ### 执行调度
 
@@ -202,6 +212,7 @@ WIP（Work In Progress）是 Legacy 模式的状态存储格式。**固定路径
 status: active              # active | need_human | done
 goal: "目标描述"
 round: 3                    # 当前第几轮
+saved_at_commit: abc1234    # 保存时的 commit hash
 ---
 
 ## Completed
@@ -225,6 +236,8 @@ round: 3                    # 当前第几轮
 1. 优先处理 GC（占比 25%，预期收益最大）
 2. 搜索 GC 优化最佳实践
 ```
+
+> 恢复时脚本会比对 `saved_at_commit` 与当前 `git rev-parse HEAD`，不一致则警告用户选择恢复或重新开始。
 
 ### 状态判断优先级
 

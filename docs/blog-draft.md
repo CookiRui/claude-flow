@@ -97,15 +97,16 @@ So I built an 8-layer execution engine on top:
 Phase 0: Classify complexity (S/M/L/XL)
 Phase 1: Goal review — is this feasible? Clear enough?
 Phase 2: DAG decomposition — break into sub-tasks with dependencies
+Phase 2.5: Budget gate — estimate cost from DAG, >$3 asks user for confirmation
 Phase 3: Parallel execution — non-conflicting tasks run simultaneously
 Phase 4: 3-level verification:
          L1: Self-check per task
-         L2: Reviewer ↔ Executor adversarial loop (up to 3 rounds)
+         L2: Reviewer ↔ Executor adversarial loop (convergence detection: blocker count must decrease, otherwise stop and escalate)
          L3: End-to-end integration test
-Phase 5: Meta-learning — record what worked for next time
+Phase 5: Meta-learning — record to .claude-flow/learnings/{domain}.md (with relevance scores + auto-pruning)
 ```
 
-Phase 0 is key: not every task needs all 8 phases — S-class tasks (single file, auto-verifiable) skip straight to execution and commit. Phase 5 writes findings to your project's `learnings.md`, so the system gets better the more you use it.
+Phase 0 is key: not every task needs all 8 phases — S-class tasks (single file, auto-verifiable) skip straight to execution and commit. Phase 5 writes findings to domain-split files in `.claude-flow/learnings/{domain}.md` (with relevance scores and auto-pruning), so the system gets better the more you use it.
 
 ### The key insight: Reviewer ↔ Executor convergence
 
@@ -116,7 +117,7 @@ My L2 verification is a **loop**:
 ```
 Reviewer Agent → finds issues → Executor Agent fixes them →
 Reviewer re-reviews → still issues? → Executor fixes again →
-Reviewer approves (or escalates after 3 rounds)
+Reviewer approves (or escalates when blocker count stops decreasing)
 ```
 
 This catches real bugs. In my first test (upgrading the persistent-solve.py script), the L2 reviewer found:

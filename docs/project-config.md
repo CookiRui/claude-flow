@@ -262,6 +262,8 @@ description: "网络通信规范：HTTP请求、Socket连接、Protobuf消息收
 
 这两个 Skill 不是建议，而是通过宪法治理条款**强制执行**的。
 
+> **语义触发**：Skill 的匹配基于任务实际行为而非用户原话。例如用户说"帮我加个功能"，如果实际涉及 bug 修复，应触发 bug-fix 相关 Skill 而非 feature 流程。判断依据是任务做了什么，而非用户说了什么。
+
 ---
 
 ## 7. Commands 命令层
@@ -272,7 +274,11 @@ description: "网络通信规范：HTTP请求、Socket连接、Protobuf消息收
 
 **`/deep-task`** — 8 层自主执行引擎（[详细文档](autonomous-engine.md)）
 - 流程：复杂度分流 → 目标审查 → DAG 分解 → 并行 Agent 执行 → 三级验证 → 元学习
-- S/M 级走快速路径，L/XL 级走完整引擎
+- 复杂度基于 1-5 分评分路由模型（非类型判断），≤2 快速路径，≥3 完整引擎
+- 预算门控：预估 >$3 时暂停请求用户确认
+- L2 收敛检测：每轮 blocker 数必须递减，否则终止防止死循环
+- WIP 恢复：resume 时校验 git hash，检测外部变更冲突
+- 元学习：经验按领域存储在 `.claude-flow/learnings/{domain}.md`
 - 价值：把 8 层引擎从方法论变成可执行流程，自动模型路由（haiku/sonnet/opus），并行执行
 
 **`/feature-plan-creator`** — 需求分析 → 技术方案 → 微任务拆解
@@ -343,6 +349,9 @@ description: "网络通信规范：HTTP请求、Socket连接、Protobuf消息收
 | **Hooks**         | 工具执行前后自动触发脚本（格式化、lint、拦截危险命令） | `.claude/settings.json` → `hooks`               | 常用：PostToolUse Edit → 自动格式化                    |
 | **MCP Server**    | 接入外部工具（数据库、Figma、GitHub 等）               | `.claude/settings.json` → `mcpServers`          | API Key 放 `settings.local.json`，不提交 Git           |
 | **.claudeignore** | 排除 AI 不需要关注的文件（构建产物、资源、依赖）       | 项目根目录 `.claudeignore`                      | 语法同 `.gitignore`，模板见 `../template/.claudeignore` |
+| **Agents**        | 专用子代理（不同模型 + 权限组合执行特定任务）           | `.claude/agents/`                               | feature-builder（opus）、code-reviewer（sonnet 只读）、test-writer（sonnet 对抗式） |
+| **REVIEW.md**     | 代码审查标准（3 维度：性能、可维护性、正确性/安全性）   | 项目根目录 `REVIEW.md`                          | 为 AI 和人类 reviewer 提供统一评审基准                 |
+| **CI/CD**         | 自动化流水线（test + lint + 模板检查 + AI review）      | `.github/workflows/ci.yml`                      | 模板内置，`/init-project` 自动生成                     |
 
 ---
 
@@ -407,14 +416,17 @@ description: "网络通信规范：HTTP请求、Socket连接、Protobuf消息收
 ### 自动初始化（推荐）
 
 ```bash
-# 1. 一键安装到项目
+# 1. 一键安装到项目（推荐使用 npx）
+npx claude-autosolve init
+
+# 或使用 Python 脚本：
 python install.py /path/to/your-project
 
 # 2. 在项目目录下启动 Claude Code，运行：
 /init-project
 ```
 
-`/init-project` 会自动扫描代码库，生成所有配置文件（constitution、rules、.claudeignore、Skills 等），只需确认一次分析结果。
+`/init-project` 会自动扫描代码库，生成所有配置文件（constitution、rules、.claudeignore、Skills、`learnings/INDEX.md`、agents、hooks、REVIEW.md、CI/CD workflow 等），只需确认一次分析结果。
 
 ### 手动初始化
 
