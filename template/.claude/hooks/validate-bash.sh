@@ -13,8 +13,8 @@
 #
 # How it works:
 #   1. Reads the tool input JSON from stdin to extract the command
-#   2. Checks the command against a list of dangerous patterns
-#   3. Match -> prints an error to stderr and exits 2 (Claude Code blocks the tool call)
+#   2. Checks the command against blocked patterns (exit 2) and warned patterns (exit 0 + stderr)
+#   3. Blocked = irreversible git ops; Warned = rm -rf (often legitimate, just needs attention)
 #
 # Environment provided by Claude Code:
 #   CLAUDE_TOOL_NAME — name of the tool being called (Bash)
@@ -23,17 +23,11 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# DANGEROUS COMMAND PATTERNS
+# COMMAND PATTERNS
 # ---------------------------------------------------------------------------
 
-# Each pattern is a regex checked against the command string.
-# Add project-specific dangerous patterns as needed.
-DANGEROUS_PATTERNS=(
-    # Destructive file operations
-    'rm\s+(-[a-zA-Z]*f|-[a-zA-Z]*r|--force|--recursive)' # rm -rf, rm -f, rm --force
-    'rm\s+-[a-zA-Z]*r[a-zA-Z]*f'                          # rm -rf (flag order variant)
-
-    # Destructive git operations
+# BLOCKED (exit 2): irreversible git operations that can destroy history or uncommitted work
+BLOCKED_PATTERNS=(
     'git\s+reset\s+--hard'          # destroys uncommitted work
     'git\s+clean\s+(-[a-zA-Z]*f|--force)' # deletes untracked files
     'git\s+push\s+(-[a-zA-Z]*f|--force)'  # rewrites remote history
@@ -41,9 +35,14 @@ DANGEROUS_PATTERNS=(
     'git\s+checkout\s+\.'           # discards all unstaged changes
     'git\s+restore\s+\.'            # discards all unstaged changes
     'git\s+branch\s+-D'             # force-delete branch without merge check
+    '{blocked-command-pattern}'     # project-specific (placeholder)
+)
 
-    # Dangerous system commands
-    '{dangerous-command-pattern}'    # project-specific (placeholder)
+# WARNED (exit 0, stderr message): potentially destructive but often legitimate
+WARNED_PATTERNS=(
+    'rm\s+(-[a-zA-Z]*f|-[a-zA-Z]*r|--force|--recursive)' # rm -rf, rm -f
+    'rm\s+-[a-zA-Z]*r[a-zA-Z]*f'                          # rm -rf (flag order variant)
+    '{warned-command-pattern}'      # project-specific (placeholder)
 )
 
 # ---------------------------------------------------------------------------
@@ -68,18 +67,33 @@ main() {
         exit 0
     fi
 
-    for pattern in "${DANGEROUS_PATTERNS[@]}"; do
+    # Hard block: irreversible git operations
+    for pattern in "${BLOCKED_PATTERNS[@]}"; do
         # Skip placeholder entries that were never replaced
         if [[ "$pattern" == "{"*"}" ]]; then
             continue
         fi
 
         if echo "$cmd" | grep -qE "$pattern"; then
-            echo "[validate-bash] BLOCKED: dangerous command detected." >&2
+            echo "[validate-bash] BLOCKED: irreversible git command detected." >&2
             echo "[validate-bash] Pattern matched: $pattern" >&2
             echo "[validate-bash] Command: $cmd" >&2
             echo "[validate-bash] If this is intentional, run the command manually in your terminal." >&2
             exit 2
+        fi
+    done
+
+    # Soft warn: potentially destructive but often legitimate
+    for pattern in "${WARNED_PATTERNS[@]}"; do
+        if [[ "$pattern" == "{"*"}" ]]; then
+            continue
+        fi
+
+        if echo "$cmd" | grep -qE "$pattern"; then
+            echo "[validate-bash] WARNING: potentially destructive command." >&2
+            echo "[validate-bash] Command: $cmd" >&2
+            echo "[validate-bash] Proceeding — verify the target path is correct." >&2
+            exit 0
         fi
     done
 

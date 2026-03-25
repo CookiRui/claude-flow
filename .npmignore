@@ -1,0 +1,28 @@
+# Cache / compiled
+__pycache__/
+*.pyc
+*.pyo
+
+# Tests
+tests/
+.pytest_cache/
+.ruff_cache/
+
+# Project self-config (not shipped to users)
+.claude/
+docs/
+.claude-flow/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated
+.repo-map.json
+.repo-map.md
+*.log
