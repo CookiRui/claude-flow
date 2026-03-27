@@ -38,5 +38,6 @@ gen/
 *.tmp
 *.bak
 
-# Persistent loop runtime state (WIP is ephemeral)
+# Runtime state (ephemeral, managed by hooks — not for Claude to search)
 .claude-flow/wip.md
+.claude-flow/session-state/

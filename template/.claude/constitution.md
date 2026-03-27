@@ -56,6 +56,54 @@ This file **only defines project-specific, counter-intuitive constraints that AI
 
 ---
 
+## §Session State Protocol
+
+**The file is the memory, not the conversation.** Conversations are ephemeral — they get compacted, crash, or end. The file `.claude-flow/session-state/active.md` persists across all of these.
+
+### When to update
+
+Update `active.md` after each significant milestone:
+- A task step is completed (code written, test passed, file committed)
+- An architectural or design decision is made
+- Switching focus to a different task or subtask
+
+### Required format
+
+```markdown
+<!-- STATUS -->
+Task: {current-task-description}
+Step: {current-step} of {total-steps}
+<!-- /STATUS -->
+
+## Current Goal
+{what-you-are-trying-to-accomplish}
+
+## Progress
+- [x] {completed-step-1}
+- [x] {completed-step-2}
+- [ ] {next-step} ← current
+- [ ] {future-step}
+
+## Key Decisions
+- {decision-1}: {rationale}
+
+## Active Files
+- {file-path-1} ({status: editing/created/reviewed})
+
+## Open Questions
+- {unresolved-question-if-any}
+```
+
+### Rules
+
+1. **Create on task start** — When starting a non-trivial task (3+ steps), create `active.md` immediately.
+2. **Update incrementally** — Update after each milestone, not in batch.
+3. **Delete on task completion** — When the task is fully done and committed, delete `active.md`. Do not let stale state accumulate.
+4. **Keep it concise** — Target 20-50 lines. This is a checkpoint, not a log.
+5. **Never duplicate the conversation** — Only record decisions and progress, not discussion.
+
+---
+
 ## Governance
 
 This constitution has the highest priority, superseding any `CLAUDE.md` or single-session instructions.
