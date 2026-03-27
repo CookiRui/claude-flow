@@ -13,6 +13,20 @@ install.py  -> Python 一键安装脚本
 tests/      -> 单元测试（pytest）
 ```
 
+## 安装到其他项目
+
+用户说"安装到 X 项目"时，必须使用 `install.py`，不要手动分析目标项目再生成配置文件：
+
+```bash
+python install.py <目标路径>              # 英文模板
+python install.py <目标路径> --lang cn    # 中文模板
+python install.py <目标路径> --preset unity  # 强制 Unity preset
+```
+
+install.py 会自动检测子目录的项目类型（如 Unity）并安装对应 preset。安装完成后提示用户：
+- 根目录运行 `/init-project` 定制通用配置
+- Unity 子目录运行 `/init-unity` 替换 Unity preset 占位符
+
 ## 规则
 
 - 任何修改完成后必须 commit 并 push 到 origin（https://github.com/CookiRui/claude-flow.git）
