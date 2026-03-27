@@ -12,18 +12,21 @@ argument-hint: [--force]
 
 ## 阶段 0：定位 Unity 项目
 
-1. 确认当前目录（或最近的父目录）是一个 Unity 项目：
-   - 检查 `Assets/` 和 `ProjectSettings/` 是否存在
-   - 如果不存在，报错退出
+自动扫描，无需用户手动 cd：
 
-2. 读取 `ProjectSettings/ProjectSettings.asset`，提取：
+1. **检查当前目录**是否是 Unity 项目（`Assets/` + `ProjectSettings/` 同时存在）
+2. **如果不是**，扫描一级子目录，找到所有包含 `Assets/` + `ProjectSettings/` 的子目录
+   - 如果找到 1 个 → 自动选中
+   - 如果找到多个 → 用 AskUserQuestion 让用户选择
+   - 如果一个都没找到 → 报错退出
+3. 确定后，以下所有阶段的文件操作都**基于该 Unity 项目目录**（记为 `UNITY_ROOT`）
+4. 读取 `UNITY_ROOT/ProjectSettings/ProjectSettings.asset`，提取：
    - `productName` → 用作 `{project-name}`
    - `companyName` → 备用信息
-
-3. 确定项目在仓库中的相对位置：
+5. 确定项目在仓库中的相对位置：
    - 运行 `git rev-parse --show-toplevel` 获取仓库根目录
-   - 计算当前 Unity 项目相对于仓库根的路径 → `{unity_project_subdir}`
-   - 如果不是 git 仓库，`{project_root}` 使用当前目录
+   - 计算 `UNITY_ROOT` 相对于仓库根的路径 → `{unity_project_subdir}`
+   - 如果不是 git 仓库，`{project_root}` 使用仓库根目录或当前目录
 
 ---
 

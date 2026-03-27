@@ -250,11 +250,13 @@ def main():
     print_results("core", core_installed, core_skipped, target)
 
     # Step 2: Apply preset
+    detected_presets = set()
     if args.preset:
         # Explicit preset: apply to root, skip auto-detect
         print(f"\n[preset] Applying '{args.preset}' to: {target}")
         p_installed, p_skipped = install_preset(target, source, args.preset, force=args.force)
         print_results(args.preset, p_installed, p_skipped, target)
+        detected_presets.add(args.preset)
     elif not args.no_detect:
         # Auto-detect subdirectory project types
         detected = detect_presets(target)
@@ -264,14 +266,32 @@ def main():
                 print(f"[preset] Applying '{preset_name}' to: {subdir}")
                 p_installed, p_skipped = install_preset(subdir, source, preset_name, force=args.force)
                 print_results(preset_name, p_installed, p_skipped, subdir)
+                detected_presets.add(preset_name)
         else:
             print("\n[auto-detect] No known project types detected in subdirectories.")
+
+    # Step 3: Copy preset commands to root so they are accessible without cd
+    for preset_name in detected_presets:
+        cmds_dir = source / "presets" / preset_name / ".claude" / "commands"
+        if cmds_dir.is_dir():
+            for cmd_file in cmds_dir.iterdir():
+                if cmd_file.is_file():
+                    dst = target / ".claude" / "commands" / cmd_file.name
+                    if dst.exists() and not args.force:
+                        print(f"  ~ Skipped root command: {cmd_file.name}")
+                    else:
+                        dst.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(cmd_file, dst)
+                        print(f"  + Copied preset command to root: .claude/commands/{cmd_file.name}")
 
     print()
     print("Next steps:")
     print(f"  cd {target}")
     print("  claude")
     print("  > /init-project")
+    if detected_presets:
+        for p in sorted(detected_presets):
+            print(f"  > /init-{p}")
     print()
     print("This will auto-analyze your project and replace all template")
     print("placeholders with project-specific configuration.")
