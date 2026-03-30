@@ -427,6 +427,10 @@ def main():
     # --- Load and output scoped rules ---
     result = get_scoped_rules(root, changed_files)
 
+    # Ensure UTF-8 output on Windows (constitution may contain non-ASCII)
+    if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
+        sys.stdout.reconfigure(encoding="utf-8")
+
     if args.format == "json":
         print(format_json(result))
     else:
