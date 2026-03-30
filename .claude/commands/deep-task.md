@@ -65,10 +65,34 @@ Output your classification and reasoning.
    - Are there hidden tradeoffs? If yes → notify user.
    - Confidence < 0.3 → present options and let user decide direction.
 
-4. **Build context**:
+4. **Build context** (three layers: constraints → codebase → integration):
+
+   **Layer A — Constraints:**
    - Read constitution (`.claude/constitution.md`)
-   - Run `python scripts/repo-map.py --format md --no-refs` if available (generates code map)
+   - Read all rules in `.claude/rules/*.md`
    - Load relevant Skills
+
+   **Layer B — Codebase understanding:**
+   - Run `python scripts/repo-map.py --incremental` to update layered code map
+   - Read `.repo-map/L0.md` for project overview; read `.repo-map/modules/{module}.md` (L1) for affected modules
+   - Run `python scripts/scope-loader.py --format inject` to load module-scoped rules (if any)
+   - Identify existing scripts/modules that serve a similar purpose to the goal — search for overlapping keywords, function names, or file patterns. If found, read them and note:
+     - What conventions they follow (module detection logic, output formats, CLI patterns)
+     - What other files consume their output (grep for script name in hooks, commands, agents)
+     - Reuse their patterns instead of inventing new ones
+
+   **Layer C — Integration surface:**
+   - Map the "consumer chain": who will call/consume the output of what you're building?
+     - Read `.claude/hooks/` — how are scripts invoked at runtime?
+     - Read `.claude/agents/` and `.claude/commands/` — which agents/commands reference related scripts?
+     - Read `install.py` and `bin/` — how are scripts distributed?
+   - Identify **all files that must change together** with the core deliverable:
+     - Hook files that need to call the new script
+     - Agent/command files that reference the script
+     - `template/` and `template-cn/` if the changed files have template counterparts
+     - `.gitignore` / `.claudeignore` if new generated directories are introduced
+     - `README.md` if public-facing functionality changes
+   - Record these as **mandatory integration targets** — they MUST appear as DAG nodes in Phase 2
 
 5. **Read historical learnings**: Read `.claude-flow/learnings/INDEX.md` if it exists.
    - Identify the domain(s) relevant to this task, read only those domain files (not all)
@@ -127,6 +151,8 @@ Before proceeding, verify:
 - [ ] **Verifiable**: each acceptance criterion can be checked automatically?
 - [ ] **Granularity**: each task ≤ 5 minutes? If not, split further.
 - [ ] **Dependencies**: DAG is acyclic and correctly ordered?
+- [ ] **Integration completeness**: every mandatory integration target from Phase 1 Layer C has a corresponding DAG node? If any integration target is missing, add it now — this is the #1 cause of "code works but isn't wired in" failures.
+- [ ] **Pattern consistency**: if Phase 1 Layer B found existing similar scripts, do the new scripts follow the same conventions (module detection, CLI interface, output format)? If not, justify the deviation.
 
 **XL tasks**: present DAG via `AskUserQuestion`, must wait for confirmation.
 
@@ -159,6 +185,18 @@ This is a rough estimate — label it as approximate. The goal is catching unexp
 ---
 
 ## Phase 3: Parallel Execution Loop
+
+### Worktree Detection
+
+Before executing, check if running in a git worktree:
+```
+if git rev-parse --git-dir 2>/dev/null | grep -q '/worktrees/'; then
+    WORKTREE=true   # Only commit locally, NEVER push to origin
+fi
+```
+When `WORKTREE=true`: all `git push` commands in this phase and Phase 5 are **skipped**. The worktree's changes are returned to the caller for review/merge.
+
+### Execution Loop
 
 ```
 while ready_tasks exist:

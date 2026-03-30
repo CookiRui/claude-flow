@@ -54,6 +54,8 @@ import yaml         # 需要 pip install (PyYAML)
 
 任何代码修改完成并通过验证后，必须 `git commit` 并 `git push origin master`。不允许只改不提交。
 
+**Worktree 例外**：当 agent 在 git worktree 中执行时（用于隔离对比、实验性分支等），只 commit 到 worktree 本地分支，**不得 push 到 origin/master**。Worktree 的产出由主会话决定是否合并。判断方式：如果 `git rev-parse --git-dir` 包含 `/worktrees/`，则处于 worktree 中。
+
 ---
 
 ## §Session State Protocol

@@ -33,7 +33,7 @@ git push origin master
 git checkout -b feat/some-feature
 ```
 
-**Exceptions:** The `feature-builder` agent uses worktrees for isolation, which is acceptable.
+**Exceptions:** The `feature-builder` agent uses worktrees for isolation, which is acceptable. Worktree agents must only commit to their local branch — **never push to origin/master** (see Constitution §4 worktree exception).
 
 ## Rule 3: Atomic commits (per Constitution §4)
 
