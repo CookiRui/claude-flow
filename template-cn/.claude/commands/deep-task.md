@@ -73,7 +73,11 @@ argument-hint: <目标描述>
    - 加载相关 Skills
 
    **Layer B — 代码库理解：**
-   - 如果可用，运行 `python scripts/repo-map.py --format md --no-refs`（生成代码地图）
+   - 运行 `python scripts/repo-map.py --incremental` 更新分层代码地图
+   - 阅读 `.repo-map/L0.md` 获取项目全局概览
+   - 根据目标描述和 git diff 确定受影响的模块
+   - 阅读 `.repo-map/modules/{module}.md`（L1）获取各受影响模块的符号索引
+   - 运行 `python scripts/scope-loader.py --format inject` 加载模块级作用域规则（如有）
    - 识别与目标功能相似的已有脚本/模块 — 搜索重叠的关键词、函数名或文件模式。如果找到，阅读它们并记录：
      - 它们遵循什么约定（模块检测逻辑、输出格式、CLI 模式）
      - 哪些其他文件消费它们的输出（grep 脚本名在 hooks、commands、agents 中的引用）
@@ -151,6 +155,56 @@ argument-hint: <目标描述>
 - [ ] **模式一致性**：如果阶段 1 Layer B 发现了已有的类似脚本，新脚本是否遵循相同的约定（模块检测、CLI 接口、输出格式）？如果不是，说明偏离的理由。
 
 **XL 任务**：通过 `AskUserQuestion` 展示 DAG，必须等待确认。
+
+### 集成审计（自动化关卡）
+
+DAG 草案通过前置检查后，启动一个**验证子 agent** 来捕获主上下文可能遗漏的集成缺口。这不是可选的 — 它将"希望覆盖集成"变为"证明覆盖了集成"。
+
+```
+Agent(
+  model="sonnet",
+  prompt="你是集成审计员。你的职责是验证任务 DAG 是否覆盖了所有集成点 — 而不仅仅是核心实现。
+
+## 输入
+- 目标：{目标描述}
+- DAG：{完整 DAG，包含任务 ID、文件、验收标准}
+- 来自阶段 1 Layer C 的集成目标：{强制目标列表}
+
+## 检查项
+
+1. **消费者覆盖**：对于 DAG 中创建/修改的每个文件，
+   grep 代码库中对类似文件的现有引用。检查：
+   - 是否有 hooks（.claude/hooks/）需要调用新脚本？
+   - 是否有 agents（.claude/agents/）或 commands（.claude/commands/）需要更新？
+   - install.py 或 bin/ 是否需要注册新脚本？
+
+2. **模板同步**：对于 .claude/ 下被修改的每个文件，
+   检查 template/.claude/ 和 template-cn/.claude/ 是否有对应版本。
+   如果有，验证 DAG 是否包含同步任务。
+
+3. **配置文件**：如果 DAG 创建了新的生成目录或输出文件，
+   验证 DAG 是否包含 .gitignore/.claudeignore 更新。
+
+4. **文档**：如果 DAG 改变了面向用户的 CLI 或功能，
+   验证 DAG 是否包含 README.md 更新。
+
+5. **模式检查**：阅读用途相似的已有脚本。
+   对比它们的约定（CLI 参数、输出格式、模块检测）
+   与 DAG 中的方案。标记偏差。
+
+## 输出格式
+AUDIT_PASS — 未发现缺口
+AUDIT_FAIL — {缺失 DAG 节点的编号列表，包含具体文件和原因}
+
+严格审查。你遗漏的每个缺口都会变成'代码能跑但没接入系统'的 bug。"
+)
+```
+
+**规则：**
+- 如果 `AUDIT_PASS` → 继续到预算关卡
+- 如果 `AUDIT_FAIL` → 将缺失节点添加到 DAG，重新运行分解前置检查，然后继续
+- 修复后不要重新运行审计 — 一轮足以捕获结构性缺口
+- 审计子 agent 只读，不修改任何文件
 
 ### 预算关卡
 
