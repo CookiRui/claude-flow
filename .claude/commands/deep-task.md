@@ -152,6 +152,57 @@ Before proceeding, verify:
 
 **XL tasks**: present DAG via `AskUserQuestion`, must wait for confirmation.
 
+### Integration Audit (automated gate)
+
+After the DAG is drafted and pre-checked, launch a **verification subagent** to catch integration gaps that the main context may have missed. This is NOT optional — it turns "hope it covers integration" into "prove it covers integration".
+
+```
+Agent(
+  model="sonnet",
+  prompt="You are an integration auditor. Your job is to verify that a task DAG
+covers ALL integration points — not just the core implementation.
+
+## Inputs
+- Goal: {goal description}
+- DAG: {full DAG with task IDs, files, acceptance criteria}
+- Integration targets from Phase 1 Layer C: {list of mandatory targets}
+
+## Your checks
+
+1. **Consumer coverage**: For each file being created/modified in the DAG,
+   grep the codebase for existing references to similar files. Check:
+   - Do any hooks (.claude/hooks/) need to call the new scripts?
+   - Do any agents (.claude/agents/) or commands (.claude/commands/) need updating?
+   - Does install.py or bin/ need to register the new scripts?
+
+2. **Template sync**: For each file under .claude/ being modified,
+   check if template/.claude/ and template-cn/.claude/ have counterparts.
+   If yes, verify DAG includes tasks to sync them.
+
+3. **Config files**: If the DAG creates new generated directories or output files,
+   verify DAG includes .gitignore/.claudeignore updates.
+
+4. **Documentation**: If the DAG changes public-facing CLI or functionality,
+   verify DAG includes README.md updates.
+
+5. **Pattern check**: Read existing scripts that serve similar purposes.
+   Compare their conventions (CLI args, output format, module detection)
+   with what the DAG proposes. Flag deviations.
+
+## Output format
+AUDIT_PASS — no gaps found
+AUDIT_FAIL — {numbered list of missing DAG nodes with specific files and reasons}
+
+Be strict. Every gap you miss will become a 'code works but isn't wired in' bug."
+)
+```
+
+**Rules:**
+- If `AUDIT_PASS` → proceed to Budget Gate
+- If `AUDIT_FAIL` → add missing nodes to the DAG, re-run Decomposition Pre-Check, then proceed
+- Do NOT re-run the audit after fixing — one round is sufficient to catch structural gaps
+- The audit subagent reads only, it does not modify any files
+
 ### Budget Gate
 
 Before executing, estimate total cost from the DAG:
