@@ -186,20 +186,20 @@ python scripts/repo-map.py /path/to/project --format json     # 输出 .repo-map
 **增量更新**：`--incremental` 基于 git diff 仅重扫变更文件，与缓存合并，大幅减少重建时间。
 **模块自动检测**：从顶级目录自动检测模块，支持 `config.json` 手动配置。
 
-### scoped-rules.py — 模块级作用域规则加载器
+### scope-loader.py — 模块级作用域规则加载器
 
 ```bash
-python scripts/scoped-rules.py --root /path/to/project --diff          # 基于 git diff 自动加载
-python scripts/scoped-rules.py --root /path/to/project --changed "src/auth/login.py"  # 指定文件
-python scripts/scoped-rules.py --root /path/to/project --list-modules  # 列出模块
-python scripts/scoped-rules.py --root /path/to/project --diff --format md  # Markdown 输出
+python scripts/scope-loader.py                                    # 从 git diff 自动检测
+python scripts/scope-loader.py --files "net/client.py,ui/app.py"  # 指定文件
+python scripts/scope-loader.py --module networking                 # 指定模块
+python scripts/scope-loader.py --format json                      # JSON 输出
+python scripts/scope-loader.py --format inject                    # stdout 注入（默认）
 ```
 
 根据 git diff 影响范围，自动加载相关模块的 constitution 和 rules。支持：
-- **模块检测**：包含 `.claude/` 子目录的目录视为独立模块
-- **继承机制**：模块 constitution 继承根级约束，可添加模块特有规则
-- **优先级**：同名规则文件模块级覆盖根级，不同名的规则同时加载
-- **输出格式**：JSON（默认，供程序消费）或 Markdown（供人阅读）
+- **模块检测**：与 repo-map.py 共享模块边界（顶级目录 + config.json 配置）
+- **继承机制**：模块 constitution 叠加根级约束（不替换），可添加模块特有规则
+- **输出格式**：inject（stdout 注入，供 hook 使用）或 JSON（供程序消费）
 
 ### lint-feedback.sh — 双向 Lint/Test 反馈闭环
 

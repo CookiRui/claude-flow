@@ -28,7 +28,11 @@ bypassPermissions: true
    - 明确不在范围内的内容。
    - 与现有代码的集成点（涉及哪些模块？）。
    - 关键边界用例和失败模式。
-3. 如可用，运行 `{repo-map-command}`（例如 `python scripts/repo-map.py --format md --no-refs`）获取代码地图。
+3. 运行 `python scripts/repo-map.py --incremental` 更新分层代码地图。
+4. 阅读 `.repo-map/L0.md` 获取项目全局概览。
+5. 确定此功能涉及哪些模块。
+6. 阅读 `.repo-map/modules/{module}.md`（L1）获取各受影响模块的符号索引。
+7. 运行 `python scripts/scope-loader.py --module {module} --format inject` 加载模块级宪法和规则。
 4. 阅读最可能受影响的文件。此时不做任何修改。
 5. 输出一段理解摘要。如果信心 < 0.8，在继续之前提出澄清问题。
 
