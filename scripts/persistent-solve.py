@@ -187,6 +187,57 @@ class RecursiveDAG:
                         task.status = "done"
                         changed = True
 
+    def replace_subtree(self, task_id: str, new_children: list['RecursiveTask']):
+        """Replace a task's children with new tasks.
+
+        - Removes all old descendants from the DAG
+        - Adds new children, wiring parent/children links
+        - Remaps any downstream dependency referencing removed IDs to task_id
+        """
+        task = self.tasks.get(task_id)
+        if not task:
+            return
+
+        # Collect all old descendant IDs (children, grandchildren, etc.)
+        old_ids: set = set()
+        def _collect(tid: str):
+            t = self.tasks.get(tid)
+            if not t:
+                return
+            old_ids.add(tid)
+            for cid in t.children:
+                _collect(cid)
+        for cid in task.children:
+            _collect(cid)
+
+        # Remove old descendants from DAG
+        for oid in old_ids:
+            del self.tasks[oid]
+
+        # Add new children and wire parent/children links
+        task.children = [c.id for c in new_children]
+        for child in new_children:
+            child.parent = task_id
+            child.depth = task.depth + 1
+            self.tasks[child.id] = child
+
+        # Remap downstream dependencies: any task referencing a removed ID -> task_id
+        for t in self.tasks.values():
+            if t.id == task_id:
+                continue
+            t.dependencies = [
+                task_id if dep in old_ids else dep
+                for dep in t.dependencies
+            ]
+            # Deduplicate while preserving order
+            seen = set()
+            deduped = []
+            for dep in t.dependencies:
+                if dep not in seen:
+                    seen.add(dep)
+                    deduped.append(dep)
+            t.dependencies = deduped
+
     def has_ready_tasks(self) -> bool:
         return len(self.get_ready_leaves()) > 0
 
