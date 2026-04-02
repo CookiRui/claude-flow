@@ -91,6 +91,23 @@ class RecursiveDAG:
         """Return all tasks that have no children (leaf nodes)."""
         return [t for t in self.tasks.values() if not t.children]
 
+    def get_children(self, task_id: str) -> list[RecursiveTask]:
+        """Return direct children of a task."""
+        task = self.tasks.get(task_id)
+        if not task or not task.children:
+            return []
+        return [self.tasks[cid] for cid in task.children if cid in self.tasks]
+
+    def get_subtree(self, task_id: str) -> list[RecursiveTask]:
+        """Return a task and all its descendants recursively."""
+        task = self.tasks.get(task_id)
+        if not task:
+            return []
+        result = [task]
+        for child_id in task.children:
+            result.extend(self.get_subtree(child_id))
+        return result
+
     def get_ready_leaves(self) -> list[RecursiveTask]:
         """Get leaf tasks whose dependencies are all done."""
         ready = []
