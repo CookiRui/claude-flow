@@ -1175,6 +1175,75 @@ def execute_task(task: RecursiveTask, goal: str, budget: BudgetTracker) -> dict:
     return result
 
 
+def execute_leaf_task(
+    task: RecursiveTask,
+    goal: str,
+    budget: BudgetTracker,
+    contracts_text: str = "",
+) -> dict:
+    """Execute a leaf task with optional contract injection.
+
+    Builds a prompt that includes the overall goal, task description,
+    acceptance criteria, file list, and — when provided — interface
+    contracts from parent/sibling tasks.  Calls ``run_claude_session``
+    and returns its result dict with cost recorded on the budget tracker.
+
+    Parameters
+    ----------
+    task:           The leaf task to execute.
+    goal:           The top-level goal (provides context).
+    budget:         Budget tracker for cost accounting.
+    contracts_text: Rendered contract markdown to inject into the prompt.
+                    Omitted from the prompt when empty.
+
+    Returns
+    -------
+    Result dict from ``run_claude_session`` (keys: output, cost_usd,
+    input_tokens, output_tokens, duration_ms, stop_reason, success).
+    """
+    files_section = ""
+    if task.files:
+        files_list = "\n".join(f"  - {f}" for f in task.files)
+        files_section = f"\n## Files to Modify\n{files_list}\n"
+
+    contracts_section = ""
+    if contracts_text:
+        contracts_section = f"""
+## Interface Contracts
+{contracts_text}
+
+You MUST respect the inputs/outputs/constraints defined in the contracts above.
+"""
+
+    prompt = f"""You are executing a single sub-task as part of a larger goal.
+
+## Overall Goal
+{goal}
+{contracts_section}
+## Your Sub-Task
+Task ID: {task.id}
+Description: {task.description}
+
+## Acceptance Criteria
+{task.acceptance_criteria}
+{files_section}
+## Instructions
+1. Complete the task described above.
+2. Before finishing, verify that ALL acceptance criteria listed above are satisfied.
+3. Once the task is complete and verified, commit your changes with the message:
+   `checkpoint: {task.id} {task.description}`
+4. Do not proceed beyond the scope of this sub-task.
+"""
+
+    result = run_claude_session(prompt, budget_usd=budget.next_task_budget())
+    budget.record(task.id, result["cost_usd"])
+
+    status_str = "success" if result["success"] else "fail"
+    print(f"  Task {task.id}: [{status_str}] cost=${result['cost_usd']:.4f}")
+
+    return result
+
+
 def execute_parallel(tasks: list, goal: str, budget: BudgetTracker) -> list:
     """Execute multiple tasks in parallel using ThreadPoolExecutor."""
     _FAIL_RESULT = {
