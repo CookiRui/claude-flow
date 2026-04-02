@@ -251,6 +251,45 @@ class RecursiveDAG:
             lines.append(f"  {t.id}: [{t.status}] {t.description}{cost}")
         return "\n".join(lines)
 
+    def to_kanban_dict(self) -> dict:
+        """Produce a nested tree structure for kanban.json output.
+
+        Returns a dict with:
+        - summary: {total, done, failed, running, pending, total_cost_usd}
+        - tree: recursive list of task nodes
+        """
+        # Count statuses
+        counts = {"total": 0, "done": 0, "failed": 0, "running": 0, "pending": 0}
+        total_cost = 0.0
+        for t in self.tasks.values():
+            counts["total"] += 1
+            if t.status in counts:
+                counts[t.status] += 1
+            total_cost += t.cost_usd
+        counts["total_cost_usd"] = round(total_cost, 4)
+
+        def _build_node(task: RecursiveTask) -> dict:
+            node = {
+                "id": task.id,
+                "description": task.description,
+                "status": task.status,
+                "complexity": task.complexity,
+                "cost_usd": task.cost_usd,
+                "commit_hash": task.commit_hash,
+                "children": [
+                    _build_node(self.tasks[cid])
+                    for cid in task.children
+                    if cid in self.tasks
+                ],
+            }
+            return node
+
+        # Root tasks are those with no parent
+        roots = [t for t in self.tasks.values() if t.parent is None]
+        tree = [_build_node(r) for r in roots]
+
+        return {"summary": counts, "tree": tree}
+
 
 # ============================================================
 # Budget Tracker
