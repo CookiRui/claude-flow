@@ -15,8 +15,8 @@ from importlib import import_module
 # Import the module (filename has a hyphen, so use importlib)
 ps = import_module("persistent-solve")
 
-Task = ps.Task
-TaskDAG = ps.TaskDAG
+RecursiveTask = ps.RecursiveTask
+RecursiveDAG = ps.RecursiveDAG
 BudgetTracker = ps.BudgetTracker
 build_clarify_prompt = ps.build_clarify_prompt
 build_plan_prompt = ps.build_plan_prompt
@@ -25,45 +25,41 @@ clarify_goal = ps.clarify_goal
 
 
 # ============================================================
-# TaskDAG tests
+# RecursiveDAG tests
 # ============================================================
 
-class TestTaskDAG:
+class TestRecursiveDAG:
 
     def _make_tasks(self):
         return [
-            Task(id="t1", description="first", acceptance_criteria="done",
+            RecursiveTask(id="t1", description="first", acceptance_criteria="done",
                  dependencies=[], files=["a.py"]),
-            Task(id="t2", description="second", acceptance_criteria="done",
+            RecursiveTask(id="t2", description="second", acceptance_criteria="done",
                  dependencies=["t1"], files=["b.py"]),
-            Task(id="t3", description="third", acceptance_criteria="done",
+            RecursiveTask(id="t3", description="third", acceptance_criteria="done",
                  dependencies=["t1"], files=["c.py"]),
         ]
 
-    def test_get_ready_tasks_initial(self):
-        dag = TaskDAG(self._make_tasks())
-        ready = dag.get_ready_tasks()
+    def test_get_ready_leaves_initial(self):
+        dag = RecursiveDAG(self._make_tasks())
+        ready = dag.get_ready_leaves()
         assert [t.id for t in ready] == ["t1"]
 
-    def test_get_ready_tasks_after_done(self):
-        dag = TaskDAG(self._make_tasks())
+    def test_get_ready_leaves_after_done(self):
+        dag = RecursiveDAG(self._make_tasks())
         dag.mark_done("t1")
-        ready = dag.get_ready_tasks()
+        ready = dag.get_ready_leaves()
         ids = sorted(t.id for t in ready)
         assert ids == ["t2", "t3"]
 
-    def test_mark_failed_retries(self):
-        dag = TaskDAG(self._make_tasks())
-        dag.mark_failed("t1")
-        assert dag.tasks["t1"].status == "pending"  # retry 1
-        assert dag.tasks["t1"].retries == 1
-
-        dag.mark_failed("t1")
-        assert dag.tasks["t1"].status == "failed"  # max_retries=2 reached
-        assert dag.tasks["t1"].retries == 2
+    def test_mark_failed_unconditional(self):
+        dag = RecursiveDAG(self._make_tasks())
+        dag.mark_failed("t1", error_summary="compile error")
+        assert dag.tasks["t1"].status == "failed"
+        assert dag.tasks["t1"].error_summary == "compile error"
 
     def test_has_ready_tasks(self):
-        dag = TaskDAG(self._make_tasks())
+        dag = RecursiveDAG(self._make_tasks())
         assert dag.has_ready_tasks()
         dag.tasks["t1"].status = "running"
         dag.tasks["t2"].status = "running"
@@ -71,7 +67,7 @@ class TestTaskDAG:
         assert not dag.has_ready_tasks()
 
     def test_all_done(self):
-        dag = TaskDAG(self._make_tasks())
+        dag = RecursiveDAG(self._make_tasks())
         assert not dag.all_done()
         for t in dag.tasks.values():
             t.status = "done"
@@ -79,24 +75,24 @@ class TestTaskDAG:
 
     def test_parallel_groups_no_conflict(self):
         tasks = [
-            Task(id="a", description="", acceptance_criteria="",
+            RecursiveTask(id="a", description="", acceptance_criteria="",
                  dependencies=[], files=["x.py"]),
-            Task(id="b", description="", acceptance_criteria="",
+            RecursiveTask(id="b", description="", acceptance_criteria="",
                  dependencies=[], files=["y.py"]),
         ]
-        dag = TaskDAG(tasks)
+        dag = RecursiveDAG(tasks)
         parallel, sequential = dag.get_parallel_groups(list(dag.tasks.values()))
         assert len(parallel) == 2
         assert len(sequential) == 0
 
     def test_parallel_groups_with_conflict(self):
         tasks = [
-            Task(id="a", description="", acceptance_criteria="",
+            RecursiveTask(id="a", description="", acceptance_criteria="",
                  dependencies=[], files=["x.py"]),
-            Task(id="b", description="", acceptance_criteria="",
+            RecursiveTask(id="b", description="", acceptance_criteria="",
                  dependencies=[], files=["x.py"]),
         ]
-        dag = TaskDAG(tasks)
+        dag = RecursiveDAG(tasks)
         parallel, sequential = dag.get_parallel_groups(list(dag.tasks.values()))
         assert len(parallel) == 1
         assert len(sequential) == 1
@@ -104,21 +100,21 @@ class TestTaskDAG:
     def test_parallel_groups_empty_files_sequential(self):
         """Tasks with empty files list are treated as sequential (unknown scope)."""
         tasks = [
-            Task(id="a", description="", acceptance_criteria="",
+            RecursiveTask(id="a", description="", acceptance_criteria="",
                  dependencies=[], files=[]),
-            Task(id="b", description="", acceptance_criteria="",
+            RecursiveTask(id="b", description="", acceptance_criteria="",
                  dependencies=[], files=["y.py"]),
         ]
-        dag = TaskDAG(tasks)
+        dag = RecursiveDAG(tasks)
         all_tasks = list(dag.tasks.values())
         parallel, sequential = dag.get_parallel_groups(all_tasks)
         empty_files_task = [t for t in sequential if t.id == "a"]
         assert len(empty_files_task) == 1 or len(parallel) <= 1
 
     def test_single_task_parallel(self):
-        tasks = [Task(id="a", description="", acceptance_criteria="",
+        tasks = [RecursiveTask(id="a", description="", acceptance_criteria="",
                       dependencies=[], files=["x.py"])]
-        dag = TaskDAG(tasks)
+        dag = RecursiveDAG(tasks)
         parallel, sequential = dag.get_parallel_groups(list(dag.tasks.values()))
         assert len(parallel) == 1
         assert len(sequential) == 0

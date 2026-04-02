@@ -78,8 +78,8 @@ class RecursiveTask:
         if self.children is None:
             self.children = []
 
-class TaskDAG:
-    """Directed Acyclic Graph of tasks with dependency tracking."""
+class RecursiveDAG:
+    """Directed Acyclic Graph of tasks with dependency tracking and tree structure."""
 
     def __init__(self, tasks: list[RecursiveTask] = None):
         self.tasks = {t.id: t for t in (tasks or [])}
@@ -87,12 +87,18 @@ class TaskDAG:
     def add_task(self, task: RecursiveTask):
         self.tasks[task.id] = task
 
-    def get_ready_tasks(self) -> list[RecursiveTask]:
-        """Get tasks whose dependencies are all done."""
+    def get_leaf_tasks(self) -> list[RecursiveTask]:
+        """Return all tasks that have no children (leaf nodes)."""
+        return [t for t in self.tasks.values() if not t.children]
+
+    def get_ready_leaves(self) -> list[RecursiveTask]:
+        """Get leaf tasks whose dependencies are all done."""
         ready = []
         for task in self.tasks.values():
             if task.status != "pending":
                 continue
+            if task.children:
+                continue  # only leaf nodes
             deps_met = all(
                 self.tasks[dep].status == "done"
                 for dep in task.dependencies
@@ -136,18 +142,16 @@ class TaskDAG:
             self.tasks[task_id].status = "done"
             self.tasks[task_id].result = result
 
-    def mark_failed(self, task_id: str, result: dict = None):
+    def mark_failed(self, task_id: str, error_summary: str = None, result: dict = None):
+        """Unconditionally set task status to 'failed'. Retry logic is owned by execution layer."""
         if task_id in self.tasks:
             task = self.tasks[task_id]
-            task.retries += 1
-            if task.retries >= task.max_retries:
-                task.status = "failed"
-            else:
-                task.status = "pending"  # retry
+            task.status = "failed"
+            task.error_summary = error_summary
             task.result = result
 
     def has_ready_tasks(self) -> bool:
-        return len(self.get_ready_tasks()) > 0
+        return len(self.get_ready_leaves()) > 0
 
     def all_done(self) -> bool:
         return all(t.status in ("done", "failed") for t in self.tasks.values())
@@ -523,11 +527,11 @@ Example output:
 ```"""
 
 
-def parse_dag_response(response: str) -> TaskDAG:
+def parse_dag_response(response: str) -> RecursiveDAG:
     """Parse Claude's response to extract the JSON DAG.
 
     Looks for a ```json ... ``` code fence, parses the JSON array, and builds a
-    TaskDAG from the result.  Falls back to a single-task DAG on any error.
+    RecursiveDAG from the result.  Falls back to a single-task DAG on any error.
     """
     try:
         match = re.search(r"```json\s*([\s\S]*?)\s*```", response)
@@ -551,7 +555,7 @@ def parse_dag_response(response: str) -> TaskDAG:
             )
             tasks.append(task)
 
-        return TaskDAG(tasks)
+        return RecursiveDAG(tasks)
 
     except Exception as exc:  # noqa: BLE001
         print(f"  [DAG] Failed to parse planning response ({exc}). Using single-task fallback.")
@@ -562,7 +566,7 @@ def parse_dag_response(response: str) -> TaskDAG:
             dependencies=[],
             files=[],
         )
-        return TaskDAG([fallback])
+        return RecursiveDAG([fallback])
 
 
 def clarify_goal(goal: str, budget: BudgetTracker) -> str:
@@ -642,7 +646,7 @@ def clarify_goal(goal: str, budget: BudgetTracker) -> str:
     return goal
 
 
-def plan_dag(goal: str, budget: BudgetTracker) -> TaskDAG:
+def plan_dag(goal: str, budget: BudgetTracker) -> RecursiveDAG:
     """Orchestrate DAG planning: call Claude, record cost, parse, and return the DAG."""
     print("  [DAG] Planning sub-tasks...")
     prompt = build_plan_prompt(goal)
@@ -726,14 +730,14 @@ def execute_parallel(tasks: list, goal: str, budget: BudgetTracker) -> list:
     return results
 
 
-def execute_dag(dag: TaskDAG, goal: str, budget: BudgetTracker) -> None:
+def execute_dag(dag: RecursiveDAG, goal: str, budget: BudgetTracker) -> None:
     """Main DAG execution loop — runs tasks respecting dependencies and budget."""
     while dag.has_ready_tasks():
         if not budget.can_afford():
             print(f"\n[BUDGET EXHAUSTED] Remaining: ${budget.remaining():.4f}. Stopping DAG execution.")
             break
 
-        ready = dag.get_ready_tasks()
+        ready = dag.get_ready_leaves()
         parallel, sequential = dag.get_parallel_groups(ready)
 
         # Execute parallel batch
