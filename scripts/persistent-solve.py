@@ -55,8 +55,8 @@ WIP_FILE = f"{WIP_DIR}/wip.md"
 # ============================================================
 
 @dataclass
-class Task:
-    """A single sub-task in the DAG."""
+class RecursiveTask:
+    """A single sub-task in the recursive DAG."""
     id: str
     description: str
     acceptance_criteria: str
@@ -66,17 +66,28 @@ class Task:
     result: dict = None  # result from claude session
     retries: int = 0
     max_retries: int = 2
+    complexity: int = 1  # 1-5 complexity rating
+    depth: int = 0  # depth in task tree
+    children: list = None  # list of child task IDs
+    parent: str = None  # parent task ID or None
+    cost_usd: float = 0.0  # cost tracking
+    commit_hash: str = None  # git commit hash when done
+    error_summary: str = None  # summary of last error
+
+    def __post_init__(self):
+        if self.children is None:
+            self.children = []
 
 class TaskDAG:
     """Directed Acyclic Graph of tasks with dependency tracking."""
 
-    def __init__(self, tasks: list[Task] = None):
+    def __init__(self, tasks: list[RecursiveTask] = None):
         self.tasks = {t.id: t for t in (tasks or [])}
 
-    def add_task(self, task: Task):
+    def add_task(self, task: RecursiveTask):
         self.tasks[task.id] = task
 
-    def get_ready_tasks(self) -> list[Task]:
+    def get_ready_tasks(self) -> list[RecursiveTask]:
         """Get tasks whose dependencies are all done."""
         ready = []
         for task in self.tasks.values():
@@ -91,7 +102,7 @@ class TaskDAG:
                 ready.append(task)
         return ready
 
-    def get_parallel_groups(self, ready: list[Task]) -> tuple[list[Task], list[Task]]:
+    def get_parallel_groups(self, ready: list[RecursiveTask]) -> tuple[list[RecursiveTask], list[RecursiveTask]]:
         """Split ready tasks into parallel (no file conflicts) and sequential groups.
 
         Tasks with empty ``files`` lists are treated as potentially conflicting
@@ -395,8 +406,10 @@ def run_claude_session(
     stop_reason   (str)
     success       (bool)  — False when claude reports is_error or on exception
     """
+    # On Windows, shell=True + long prompts gets truncated by cmd.exe.
+    # Feed prompt via stdin (claude -p without args reads from stdin).
     cmd = [
-        "claude", "-p", prompt,
+        "claude", "-p",
         "--output-format", "json",
         "--dangerously-skip-permissions",
     ]
@@ -406,11 +419,13 @@ def run_claude_session(
     try:
         proc = subprocess.run(
             cmd,
+            input=prompt,
             capture_output=True,
             text=True,
             timeout=timeout,
             encoding="utf-8",
             errors="replace",
+            shell=(sys.platform == "win32"),
         )
         return _parse_claude_json(proc.stdout or "")
 
@@ -527,7 +542,7 @@ def parse_dag_response(response: str) -> TaskDAG:
 
         tasks = []
         for item in task_list:
-            task = Task(
+            task = RecursiveTask(
                 id=str(item["id"]),
                 description=str(item.get("description", "")),
                 acceptance_criteria=str(item.get("acceptance_criteria", "")),
@@ -540,7 +555,7 @@ def parse_dag_response(response: str) -> TaskDAG:
 
     except Exception as exc:  # noqa: BLE001
         print(f"  [DAG] Failed to parse planning response ({exc}). Using single-task fallback.")
-        fallback = Task(
+        fallback = RecursiveTask(
             id="task-1",
             description=response[:200] if response else "Complete the goal",
             acceptance_criteria="Goal is fully achieved",
@@ -646,7 +661,7 @@ def plan_dag(goal: str, budget: BudgetTracker) -> TaskDAG:
 # Task Execution
 # ============================================================
 
-def build_task_prompt(task: Task, goal: str) -> str:
+def build_task_prompt(task: RecursiveTask, goal: str) -> str:
     """Build a prompt for executing a single sub-task."""
     files_section = ""
     if task.files:
@@ -674,7 +689,7 @@ Description: {task.description}
 """
 
 
-def execute_task(task: Task, goal: str, budget: BudgetTracker) -> dict:
+def execute_task(task: RecursiveTask, goal: str, budget: BudgetTracker) -> dict:
     """Execute a single task atomically."""
     prompt = build_task_prompt(task, goal)
     result = run_claude_session(prompt, budget_usd=budget.next_task_budget())
