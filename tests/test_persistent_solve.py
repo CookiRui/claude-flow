@@ -130,6 +130,296 @@ class TestRecursiveDAG:
 
 
 # ============================================================
+# New RecursiveDAG method tests
+# ============================================================
+
+class TestGetLeafTasks:
+
+    def test_all_leaves(self):
+        """Tasks with no children are all leaves."""
+        tasks = [
+            RecursiveTask(id="a", description="", acceptance_criteria="", dependencies=[], files=[]),
+            RecursiveTask(id="b", description="", acceptance_criteria="", dependencies=[], files=[]),
+        ]
+        dag = RecursiveDAG(tasks)
+        leaves = dag.get_leaf_tasks()
+        assert sorted(t.id for t in leaves) == ["a", "b"]
+
+    def test_parent_excluded(self):
+        """A task with children is not a leaf."""
+        parent = RecursiveTask(id="p", description="", acceptance_criteria="", dependencies=[], files=[], children=["c1"])
+        child = RecursiveTask(id="c1", description="", acceptance_criteria="", dependencies=[], files=[], parent="p")
+        dag = RecursiveDAG([parent, child])
+        leaves = dag.get_leaf_tasks()
+        assert [t.id for t in leaves] == ["c1"]
+
+    def test_empty_dag(self):
+        dag = RecursiveDAG([])
+        assert dag.get_leaf_tasks() == []
+
+
+class TestGetChildren:
+
+    def test_returns_direct_children(self):
+        parent = RecursiveTask(id="p", description="", acceptance_criteria="", dependencies=[], files=[], children=["c1", "c2"])
+        c1 = RecursiveTask(id="c1", description="child1", acceptance_criteria="", dependencies=[], files=[], parent="p")
+        c2 = RecursiveTask(id="c2", description="child2", acceptance_criteria="", dependencies=[], files=[], parent="p")
+        dag = RecursiveDAG([parent, c1, c2])
+        children = dag.get_children("p")
+        assert sorted(c.id for c in children) == ["c1", "c2"]
+
+    def test_nonexistent_task(self):
+        dag = RecursiveDAG([])
+        assert dag.get_children("nope") == []
+
+    def test_task_with_no_children(self):
+        t = RecursiveTask(id="t", description="", acceptance_criteria="", dependencies=[], files=[])
+        dag = RecursiveDAG([t])
+        assert dag.get_children("t") == []
+
+    def test_missing_child_id_skipped(self):
+        """If a child ID is listed but doesn't exist in the DAG, skip it."""
+        parent = RecursiveTask(id="p", description="", acceptance_criteria="", dependencies=[], files=[], children=["missing"])
+        dag = RecursiveDAG([parent])
+        assert dag.get_children("p") == []
+
+
+class TestGetSubtree:
+
+    def test_single_task(self):
+        t = RecursiveTask(id="t", description="", acceptance_criteria="", dependencies=[], files=[])
+        dag = RecursiveDAG([t])
+        subtree = dag.get_subtree("t")
+        assert [s.id for s in subtree] == ["t"]
+
+    def test_nested_subtree(self):
+        root = RecursiveTask(id="r", description="", acceptance_criteria="", dependencies=[], files=[], children=["a"])
+        a = RecursiveTask(id="a", description="", acceptance_criteria="", dependencies=[], files=[], parent="r", children=["b"])
+        b = RecursiveTask(id="b", description="", acceptance_criteria="", dependencies=[], files=[], parent="a")
+        dag = RecursiveDAG([root, a, b])
+        subtree = dag.get_subtree("r")
+        assert [s.id for s in subtree] == ["r", "a", "b"]
+
+    def test_nonexistent_task(self):
+        dag = RecursiveDAG([])
+        assert dag.get_subtree("nope") == []
+
+    def test_subtree_of_leaf(self):
+        leaf = RecursiveTask(id="leaf", description="", acceptance_criteria="", dependencies=[], files=[])
+        dag = RecursiveDAG([leaf])
+        subtree = dag.get_subtree("leaf")
+        assert len(subtree) == 1
+        assert subtree[0].id == "leaf"
+
+
+class TestPropagateStatus:
+
+    def test_parent_marked_done_when_all_children_done(self):
+        parent = RecursiveTask(id="p", description="", acceptance_criteria="", dependencies=[], files=[], children=["c1", "c2"])
+        c1 = RecursiveTask(id="c1", description="", acceptance_criteria="", dependencies=[], files=[], parent="p", status="done")
+        c2 = RecursiveTask(id="c2", description="", acceptance_criteria="", dependencies=[], files=[], parent="p", status="done")
+        dag = RecursiveDAG([parent, c1, c2])
+        dag.propagate_status()
+        assert dag.tasks["p"].status == "done"
+
+    def test_parent_not_done_if_child_pending(self):
+        parent = RecursiveTask(id="p", description="", acceptance_criteria="", dependencies=[], files=[], children=["c1", "c2"])
+        c1 = RecursiveTask(id="c1", description="", acceptance_criteria="", dependencies=[], files=[], parent="p", status="done")
+        c2 = RecursiveTask(id="c2", description="", acceptance_criteria="", dependencies=[], files=[], parent="p", status="pending")
+        dag = RecursiveDAG([parent, c1, c2])
+        dag.propagate_status()
+        assert dag.tasks["p"].status == "pending"
+
+    def test_multi_level_propagation(self):
+        """Grandparent should be marked done if all descendants are done."""
+        gp = RecursiveTask(id="gp", description="", acceptance_criteria="", dependencies=[], files=[], children=["p"])
+        p = RecursiveTask(id="p", description="", acceptance_criteria="", dependencies=[], files=[], parent="gp", children=["c"])
+        c = RecursiveTask(id="c", description="", acceptance_criteria="", dependencies=[], files=[], parent="p", status="done")
+        dag = RecursiveDAG([gp, p, c])
+        dag.propagate_status()
+        assert dag.tasks["p"].status == "done"
+        assert dag.tasks["gp"].status == "done"
+
+    def test_no_propagation_with_failed_child(self):
+        parent = RecursiveTask(id="p", description="", acceptance_criteria="", dependencies=[], files=[], children=["c1"])
+        c1 = RecursiveTask(id="c1", description="", acceptance_criteria="", dependencies=[], files=[], parent="p", status="failed")
+        dag = RecursiveDAG([parent, c1])
+        dag.propagate_status()
+        assert dag.tasks["p"].status == "pending"
+
+    def test_thread_safety(self):
+        """Concurrent propagate_status calls should not corrupt state."""
+        import threading
+        parent = RecursiveTask(id="p", description="", acceptance_criteria="", dependencies=[], files=[], children=["c1", "c2"])
+        c1 = RecursiveTask(id="c1", description="", acceptance_criteria="", dependencies=[], files=[], parent="p", status="done")
+        c2 = RecursiveTask(id="c2", description="", acceptance_criteria="", dependencies=[], files=[], parent="p", status="done")
+        dag = RecursiveDAG([parent, c1, c2])
+        threads = [threading.Thread(target=dag.propagate_status) for _ in range(20)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert dag.tasks["p"].status == "done"
+
+
+class TestReplaceSubtree:
+
+    def test_basic_replacement(self):
+        parent = RecursiveTask(id="p", description="", acceptance_criteria="", dependencies=[], files=[], children=["old1", "old2"])
+        old1 = RecursiveTask(id="old1", description="", acceptance_criteria="", dependencies=[], files=[], parent="p")
+        old2 = RecursiveTask(id="old2", description="", acceptance_criteria="", dependencies=[], files=[], parent="p")
+        dag = RecursiveDAG([parent, old1, old2])
+
+        new_children = [
+            RecursiveTask(id="new1", description="new child 1", acceptance_criteria="", dependencies=[], files=[]),
+            RecursiveTask(id="new2", description="new child 2", acceptance_criteria="", dependencies=[], files=[]),
+        ]
+        dag.replace_subtree("p", new_children)
+
+        assert "old1" not in dag.tasks
+        assert "old2" not in dag.tasks
+        assert "new1" in dag.tasks
+        assert "new2" in dag.tasks
+        assert dag.tasks["p"].children == ["new1", "new2"]
+        assert dag.tasks["new1"].parent == "p"
+        assert dag.tasks["new2"].parent == "p"
+
+    def test_downstream_dependency_remapping(self):
+        """Tasks depending on removed children should depend on the parent instead."""
+        parent = RecursiveTask(id="p", description="", acceptance_criteria="", dependencies=[], files=[], children=["old1"])
+        old1 = RecursiveTask(id="old1", description="", acceptance_criteria="", dependencies=[], files=[], parent="p")
+        downstream = RecursiveTask(id="down", description="", acceptance_criteria="", dependencies=["old1"], files=[])
+        dag = RecursiveDAG([parent, old1, downstream])
+
+        new_children = [
+            RecursiveTask(id="new1", description="", acceptance_criteria="", dependencies=[], files=[]),
+        ]
+        dag.replace_subtree("p", new_children)
+
+        assert dag.tasks["down"].dependencies == ["p"]
+
+    def test_dedup_remapped_dependencies(self):
+        """If a task depends on multiple removed IDs, they should be deduped to one parent ref."""
+        parent = RecursiveTask(id="p", description="", acceptance_criteria="", dependencies=[], files=[], children=["old1", "old2"])
+        old1 = RecursiveTask(id="old1", description="", acceptance_criteria="", dependencies=[], files=[], parent="p")
+        old2 = RecursiveTask(id="old2", description="", acceptance_criteria="", dependencies=[], files=[], parent="p")
+        downstream = RecursiveTask(id="down", description="", acceptance_criteria="", dependencies=["old1", "old2"], files=[])
+        dag = RecursiveDAG([parent, old1, old2, downstream])
+
+        dag.replace_subtree("p", [])
+
+        assert dag.tasks["down"].dependencies == ["p"]
+
+    def test_deep_descendants_removed(self):
+        """Grandchildren should also be removed."""
+        root = RecursiveTask(id="r", description="", acceptance_criteria="", dependencies=[], files=[], children=["c"])
+        c = RecursiveTask(id="c", description="", acceptance_criteria="", dependencies=[], files=[], parent="r", children=["gc"])
+        gc = RecursiveTask(id="gc", description="", acceptance_criteria="", dependencies=[], files=[], parent="c")
+        dag = RecursiveDAG([root, c, gc])
+
+        dag.replace_subtree("r", [
+            RecursiveTask(id="new1", description="", acceptance_criteria="", dependencies=[], files=[]),
+        ])
+
+        assert "c" not in dag.tasks
+        assert "gc" not in dag.tasks
+        assert "new1" in dag.tasks
+
+    def test_nonexistent_task_noop(self):
+        dag = RecursiveDAG([])
+        dag.replace_subtree("nope", [])  # should not raise
+
+    def test_new_children_depth_set(self):
+        parent = RecursiveTask(id="p", description="", acceptance_criteria="", dependencies=[], files=[], depth=2, children=[])
+        dag = RecursiveDAG([parent])
+        new_child = RecursiveTask(id="nc", description="", acceptance_criteria="", dependencies=[], files=[])
+        dag.replace_subtree("p", [new_child])
+        assert dag.tasks["nc"].depth == 3
+
+
+class TestToKanbanDict:
+
+    def test_basic_structure(self):
+        t1 = RecursiveTask(id="t1", description="task one", acceptance_criteria="", dependencies=[], files=[], status="done", cost_usd=0.05, complexity=2)
+        t2 = RecursiveTask(id="t2", description="task two", acceptance_criteria="", dependencies=[], files=[], status="pending", cost_usd=0.0, complexity=1)
+        dag = RecursiveDAG([t1, t2])
+        kanban = dag.to_kanban_dict()
+
+        assert "summary" in kanban
+        assert "tree" in kanban
+        assert kanban["summary"]["total"] == 2
+        assert kanban["summary"]["done"] == 1
+        assert kanban["summary"]["pending"] == 1
+        assert kanban["summary"]["total_cost_usd"] == 0.05
+
+    def test_nested_tree(self):
+        parent = RecursiveTask(id="p", description="parent", acceptance_criteria="", dependencies=[], files=[], children=["c1"], complexity=3, cost_usd=0.0)
+        child = RecursiveTask(id="c1", description="child", acceptance_criteria="", dependencies=[], files=[], parent="p", complexity=1, cost_usd=0.02)
+        dag = RecursiveDAG([parent, child])
+        kanban = dag.to_kanban_dict()
+
+        assert len(kanban["tree"]) == 1
+        root_node = kanban["tree"][0]
+        assert root_node["id"] == "p"
+        assert len(root_node["children"]) == 1
+        assert root_node["children"][0]["id"] == "c1"
+        assert root_node["children"][0]["cost_usd"] == 0.02
+
+    def test_empty_dag(self):
+        dag = RecursiveDAG([])
+        kanban = dag.to_kanban_dict()
+        assert kanban["summary"]["total"] == 0
+        assert kanban["tree"] == []
+
+    def test_node_fields(self):
+        """Each node must have id, description, status, complexity, cost_usd, commit_hash, children."""
+        t = RecursiveTask(id="t1", description="d", acceptance_criteria="", dependencies=[], files=[], complexity=4, cost_usd=0.1, commit_hash="abc123")
+        dag = RecursiveDAG([t])
+        node = dag.to_kanban_dict()["tree"][0]
+        assert node["id"] == "t1"
+        assert node["description"] == "d"
+        assert node["status"] == "pending"
+        assert node["complexity"] == 4
+        assert node["cost_usd"] == 0.1
+        assert node["commit_hash"] == "abc123"
+        assert node["children"] == []
+
+
+class TestMarkFailedUnconditional:
+
+    def test_no_retry_logic(self):
+        """mark_failed should set failed immediately regardless of retries remaining."""
+        t = RecursiveTask(id="t1", description="", acceptance_criteria="", dependencies=[], files=[], max_retries=5, retries=0)
+        dag = RecursiveDAG([t])
+        dag.mark_failed("t1", error_summary="boom")
+        assert dag.tasks["t1"].status == "failed"
+        assert dag.tasks["t1"].retries == 0  # retries not incremented by mark_failed
+
+    def test_error_summary_stored(self):
+        t = RecursiveTask(id="t1", description="", acceptance_criteria="", dependencies=[], files=[])
+        dag = RecursiveDAG([t])
+        dag.mark_failed("t1", error_summary="OOM killed")
+        assert dag.tasks["t1"].error_summary == "OOM killed"
+
+    def test_result_stored(self):
+        t = RecursiveTask(id="t1", description="", acceptance_criteria="", dependencies=[], files=[])
+        dag = RecursiveDAG([t])
+        dag.mark_failed("t1", error_summary="err", result={"cost_usd": 0.03})
+        assert dag.tasks["t1"].result == {"cost_usd": 0.03}
+
+    def test_nonexistent_task_noop(self):
+        dag = RecursiveDAG([])
+        dag.mark_failed("nope", error_summary="test")  # should not raise
+
+    def test_already_done_task_becomes_failed(self):
+        """mark_failed overwrites any existing status."""
+        t = RecursiveTask(id="t1", description="", acceptance_criteria="", dependencies=[], files=[], status="done")
+        dag = RecursiveDAG([t])
+        dag.mark_failed("t1", error_summary="rollback")
+        assert dag.tasks["t1"].status == "failed"
+
+
+# ============================================================
 # BudgetTracker tests
 # ============================================================
 
