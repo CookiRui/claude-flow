@@ -1954,12 +1954,17 @@ def persistent_solve(
     per_task_budget_usd: float = 0.5,
     mode: str = "dag",
     skip_clarify: bool = False,
+    recursive: bool = False,
+    kanban: bool = False,
+    kanban_path: str = None,
+    verify_level: str = "auto",
 ):
     """Main persistent loop logic.
 
     Modes:
         dag   — Plan a DAG of sub-tasks, execute each as an independent
                 ``claude -p`` call with budget tracking and parallel execution.
+                When *recursive* is True, uses recursive planning and execution.
         legacy — Original behaviour: one full Claude session per round,
                  WIP-file handshake between rounds.
     """
@@ -1967,17 +1972,24 @@ def persistent_solve(
     start_time = time.time()
     budget = BudgetTracker(max_budget_usd, per_task_budget_usd)
 
+    mode_label = f"{mode}" + (" (recursive)" if recursive else "")
     print(f"{'='*60}")
     print("Persistent loop started")
     print(f"Goal: {goal}")
-    print(f"Mode: {mode}")
+    print(f"Mode: {mode_label}")
     print(f"Max rounds: {max_rounds} | Max time: {max_time}s")
     print(f"Budget: ${max_budget_usd:.2f} total, ${per_task_budget_usd:.2f} per task")
+    if recursive:
+        print(f"Verify level: {verify_level} | Kanban: {'on' if kanban else 'off'}")
     print(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"{'='*60}")
 
     if mode == "dag":
-        _run_dag_mode(goal, max_rounds, max_time, budget, start_time, skip_clarify)
+        _run_dag_mode(
+            goal, max_rounds, max_time, budget, start_time, skip_clarify,
+            recursive=recursive, kanban=kanban, kanban_path=kanban_path,
+            verify_level=verify_level,
+        )
     else:
         _run_legacy_mode(goal, max_rounds, max_time, budget, start_time)
 
@@ -1996,14 +2008,28 @@ def _run_dag_mode(
     budget: BudgetTracker,
     start_time: float,
     skip_clarify: bool = False,
+    recursive: bool = False,
+    kanban: bool = False,
+    kanban_path: str = None,
+    verify_level: str = "auto",
 ):
-    """DAG mode: plan once, execute sub-tasks atomically with budget control."""
+    """DAG mode: plan once, execute sub-tasks atomically with budget control.
+
+    When *recursive* is True, uses recursive_plan + execute_recursive_dag
+    instead of the flat plan_dag + execute_dag pipeline.
+    """
     original_goal = goal
 
     # Phase 0: Clarify goal before first round
     if not skip_clarify:
         goal = clarify_goal(goal, budget)
         original_goal = goal
+
+    # Prepare kanban writer if requested
+    kanban_out = None
+    if kanban:
+        kanban_out = kanban_path or os.path.join(WIP_DIR, "kanban.json")
+        os.makedirs(os.path.dirname(kanban_out) or ".", exist_ok=True)
 
     for round_num in range(1, max_rounds + 1):
         elapsed = time.time() - start_time
@@ -2018,17 +2044,35 @@ def _run_dag_mode(
         print(f"DAG Round {round_num}/{max_rounds} | "
               f"Elapsed {int(elapsed)}s | "
               f"Budget ${budget.remaining():.2f} remaining")
+        if recursive:
+            print(f"  Mode: recursive | Verify: {verify_level}")
         print(f"{'─'*60}")
 
         # Phase 1: Plan
-        dag = plan_dag(goal, budget)
+        if recursive:
+            dag = recursive_plan(goal, budget)
+        else:
+            dag = plan_dag(goal, budget)
 
         if not dag.tasks:
             print("  [DAG] No tasks generated. Stopping.")
             break
 
         # Phase 2: Execute
-        execute_dag(dag, goal, budget)
+        if recursive:
+            execute_recursive_dag(dag, goal, budget, kanban=kanban_out)
+        else:
+            execute_dag(dag, goal, budget)
+
+        # Write final kanban state
+        if kanban_out and hasattr(dag, "to_kanban_json"):
+            try:
+                import json as _json
+                with open(kanban_out, "w", encoding="utf-8") as f:
+                    _json.dump(dag.to_kanban_json(), f, indent=2, ensure_ascii=False)
+                print(f"  [Kanban] Written to {kanban_out}")
+            except Exception as e:
+                print(f"  [Kanban] Write failed: {e}")
 
         # Phase 3: Check results
         failed = [t for t in dag.tasks.values() if t.status == "failed"]
@@ -2041,7 +2085,7 @@ def _run_dag_mode(
             print(f"\n{'='*60}")
             print(f"All tasks completed in round {round_num}!")
             print(f"{'='*60}")
-            return
+            break
 
         if failed and not pending:
             # All remaining tasks failed — rebuild DAG with failure context
@@ -2056,8 +2100,22 @@ def _run_dag_mode(
             # Budget ran out mid-DAG — stop, user can re-run
             print(f"  {len(pending)} tasks still pending (likely budget exhausted).")
             break
+    else:
+        # Loop completed without break
+        pass
 
-    print(f"\nTo continue: python scripts/persistent-solve.py \"{original_goal}\"")
+    # Phase 3 (final): Cleanup contracts and print summary
+    if recursive:
+        print("\n  [Cleanup] Removing contract files...")
+        cleanup_contracts()
+
+    print(f"\n  DAG execution summary:")
+    print(f"    Budget spent: {budget.summary()}")
+    print(f"    Total time: {int(time.time() - start_time)}s")
+
+    if not (not failed and not pending):
+        print(f"\nTo continue: python scripts/persistent-solve.py \"{original_goal}\""
+              f"{' --recursive' if recursive else ''}")
 
 
 def _run_legacy_mode(
@@ -2195,6 +2253,22 @@ def main():
         "--no-clarify", action="store_true",
         help="Skip goal clarification phase and proceed directly to planning"
     )
+    parser.add_argument(
+        "--recursive", action="store_true",
+        help="Use recursive DAG planning and execution (v2 engine)"
+    )
+    parser.add_argument(
+        "--kanban", action="store_true",
+        help="Enable kanban JSON output during execution"
+    )
+    parser.add_argument(
+        "--kanban-path", type=str, default=None,
+        help="Custom path for kanban JSON output (default: .claude-flow/kanban.json)"
+    )
+    parser.add_argument(
+        "--verify-level", choices=["auto", "l1", "l2", "l3"], default="auto",
+        help="Verification level: 'auto' (based on complexity), 'l1', 'l2', 'l3' (default: auto)"
+    )
 
     args = parser.parse_args()
     persistent_solve(
@@ -2205,6 +2279,10 @@ def main():
         per_task_budget_usd=args.per_task_budget,
         mode=args.mode,
         skip_clarify=args.no_clarify,
+        recursive=args.recursive,
+        kanban=args.kanban,
+        kanban_path=args.kanban_path,
+        verify_level=args.verify_level,
     )
 
 
