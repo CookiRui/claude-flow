@@ -1742,7 +1742,8 @@ Output a JSON array inside a ```json code fence:
         return False
 
 
-def execute_dag(dag: RecursiveDAG, goal: str, budget: BudgetTracker) -> None:
+def execute_dag(dag: RecursiveDAG, goal: str, budget: BudgetTracker,
+                kanban_state: KanbanState = None, kanban_path: str = None) -> None:
     """Main DAG execution loop — runs tasks respecting dependencies and budget."""
     while dag.has_ready_tasks():
         if not budget.can_afford():
@@ -1775,20 +1776,15 @@ def execute_dag(dag: RecursiveDAG, goal: str, budget: BudgetTracker) -> None:
             else:
                 dag.mark_failed(task.id, result)
 
+        # Update kanban after each batch
+        if kanban_state:
+            kanban_state.update_from_dag(dag)
+            if kanban_path:
+                kanban_state.save(kanban_path)
+            kanban_state.print_tree()
+
         print(f"\n--- DAG Status ---\n{dag.summary()}\n"
               f"Budget: {budget.summary()}\n------------------")
-
-
-def _save_kanban(dag: RecursiveDAG, goal: str, start_time: float):
-    """Write kanban.json to .claude-flow/ directory."""
-    kanban_path = os.path.join(WIP_DIR, "kanban.json")
-    data = dag.to_kanban_dict()
-    data["goal"] = goal
-    data["start_time"] = datetime.fromtimestamp(start_time).isoformat()
-    data["updated_at"] = datetime.now().isoformat()
-    os.makedirs(WIP_DIR, exist_ok=True)
-    with open(kanban_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
 
 
 def _execute_leaf_parallel(tasks: list, goal: str, budget: BudgetTracker, dag: RecursiveDAG) -> list:
@@ -1833,7 +1829,8 @@ def execute_recursive_dag(
     dag: RecursiveDAG,
     goal: str,
     budget: BudgetTracker,
-    kanban=None,
+    kanban_state: KanbanState = None,
+    kanban_path: str = None,
 ) -> None:
     """Recursive DAG execution loop with retry tracking, verification dispatch, and failure handling.
 
@@ -1842,12 +1839,10 @@ def execute_recursive_dag(
     dag:    The recursive DAG to execute.
     goal:   The top-level goal string (for prompt context).
     budget: Budget tracker for cost accounting and circuit breaking.
-    kanban: Optional dict with 'goal' and 'start_time' for kanban output.
-            When provided, kanban.json is updated after each batch.
+    kanban_state: Optional KanbanState instance for tracking progress.
+    kanban_path: Optional file path for kanban JSON output.
     """
     execution_retries: dict = {}  # task_id -> retry count
-    start_time = kanban.get("start_time", time.time()) if kanban else time.time()
-    kanban_goal = kanban.get("goal", goal) if kanban else goal
 
     # Track which branch tasks are already done (to detect newly-done branches)
     done_branches: set = {
@@ -1963,8 +1958,11 @@ def execute_recursive_dag(
                     print(f"  [Branch] {branch.id}: L3 test suite failed")
 
         # --- Update kanban ---
-        if kanban is not None:
-            _save_kanban(dag, kanban_goal, start_time)
+        if kanban_state is not None:
+            kanban_state.update_from_dag(dag)
+            if kanban_path:
+                kanban_state.save(kanban_path)
+            kanban_state.print_tree()
 
         # --- Status report ---
         print(f"\n--- DAG Status ---\n{dag.summary()}\n"
@@ -2100,11 +2098,12 @@ def _run_dag_mode(
         goal = clarify_goal(goal, budget)
         original_goal = goal
 
-    # Prepare kanban writer if requested
+    # Prepare kanban state if requested
+    kanban_state = None
     kanban_out = None
     if kanban:
         kanban_out = kanban_path or os.path.join(WIP_DIR, "kanban.json")
-        os.makedirs(os.path.dirname(kanban_out) or ".", exist_ok=True)
+        kanban_state = KanbanState(goal)
 
     for round_num in range(1, max_rounds + 1):
         elapsed = time.time() - start_time
@@ -2135,19 +2134,16 @@ def _run_dag_mode(
 
         # Phase 2: Execute
         if recursive:
-            execute_recursive_dag(dag, goal, budget, kanban=kanban_out)
+            execute_recursive_dag(dag, goal, budget, kanban_state=kanban_state, kanban_path=kanban_out)
         else:
-            execute_dag(dag, goal, budget)
+            execute_dag(dag, goal, budget, kanban_state=kanban_state, kanban_path=kanban_out)
 
         # Write final kanban state
-        if kanban_out and hasattr(dag, "to_kanban_json"):
-            try:
-                import json as _json
-                with open(kanban_out, "w", encoding="utf-8") as f:
-                    _json.dump(dag.to_kanban_json(), f, indent=2, ensure_ascii=False)
-                print(f"  [Kanban] Written to {kanban_out}")
-            except Exception as e:
-                print(f"  [Kanban] Write failed: {e}")
+        if kanban_state:
+            kanban_state.update_from_dag(dag)
+            kanban_state.save(kanban_out)
+            kanban_state.print_tree()
+            print(f"  [Kanban] Written to {kanban_out}")
 
         # Phase 3: Check results
         failed = [t for t in dag.tasks.values() if t.status == "failed"]
