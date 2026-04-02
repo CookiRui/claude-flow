@@ -1252,6 +1252,62 @@ def checkpoint_commit(task: RecursiveTask, success: bool) -> Optional[str]:
     return commit_hash
 
 
+# ============================================================
+# Verification
+# ============================================================
+
+def run_l1(task: RecursiveTask, budget: BudgetTracker) -> bool:
+    """L1 verification: quick self-check of acceptance criteria via Claude.
+
+    Builds a prompt asking Claude to verify whether the task's acceptance
+    criteria are met by the current code, then parses PASS/FAIL from output.
+
+    Parameters
+    ----------
+    task:   The task whose acceptance criteria to verify.
+    budget: Budget tracker (used to cap verification cost).
+
+    Returns
+    -------
+    True if verification passed, False otherwise.
+    """
+    prompt = f"""You are a verification agent. Check whether the following acceptance criteria are satisfied by the current code in the working directory.
+
+## Task
+{task.description}
+
+## Acceptance Criteria
+{task.acceptance_criteria}
+
+## Instructions
+1. Read the relevant files and check each acceptance criterion.
+2. Respond with exactly one line: PASS or FAIL followed by a brief reason.
+
+Examples:
+- PASS: All criteria met — function exists with correct signature and return type.
+- FAIL: Missing error handling for empty input case.
+
+Your verdict:"""
+
+    per_task_budget = min(0.05, budget.remaining() * 0.1)
+    if not budget.can_afford():
+        print(f"  [L1] Skipping verification for {task.id} — budget exhausted")
+        return False
+
+    print(f"  [L1] Verifying {task.id}...")
+    result = run_claude_session(prompt, timeout=120, budget_usd=per_task_budget)
+    budget.add(result.get("cost_usd", 0.0))
+
+    output = result.get("output", "").strip()
+    # Parse PASS/FAIL from the output
+    if re.search(r'\bPASS\b', output, re.IGNORECASE):
+        print(f"  [L1] {task.id}: PASS")
+        return True
+    else:
+        print(f"  [L1] {task.id}: FAIL — {output[:200]}")
+        return False
+
+
 def execute_dag(dag: RecursiveDAG, goal: str, budget: BudgetTracker) -> None:
     """Main DAG execution loop — runs tasks respecting dependencies and budget."""
     while dag.has_ready_tasks():
