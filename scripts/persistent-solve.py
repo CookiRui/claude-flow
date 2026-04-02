@@ -1704,6 +1704,244 @@ def execute_dag(dag: RecursiveDAG, goal: str, budget: BudgetTracker) -> None:
               f"Budget: {budget.summary()}\n------------------")
 
 
+def _save_kanban(dag: RecursiveDAG, goal: str, start_time: float):
+    """Write kanban.json to .claude-flow/ directory."""
+    kanban_path = os.path.join(WIP_DIR, "kanban.json")
+    data = dag.to_kanban_dict()
+    data["goal"] = goal
+    data["start_time"] = datetime.fromtimestamp(start_time).isoformat()
+    data["updated_at"] = datetime.now().isoformat()
+    os.makedirs(WIP_DIR, exist_ok=True)
+    with open(kanban_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+def _execute_leaf_parallel(tasks: list, goal: str, budget: BudgetTracker, dag: RecursiveDAG) -> list:
+    """Execute multiple leaf tasks in parallel with contract injection."""
+    _FAIL_RESULT = {
+        "output": "", "cost_usd": 0.0, "input_tokens": 0,
+        "output_tokens": 0, "duration_ms": 0, "stop_reason": "error",
+        "success": False,
+    }
+    results = [None] * len(tasks)
+
+    def _run_one(task):
+        contracts_text = load_relevant_contracts(task, dag)
+        return execute_leaf_task(task, goal, budget, contracts_text)
+
+    with ThreadPoolExecutor(max_workers=max(1, len(tasks))) as executor:
+        futures = {
+            executor.submit(_run_one, task): idx
+            for idx, task in enumerate(tasks)
+        }
+        for future in futures:
+            idx = futures[future]
+            try:
+                results[idx] = future.result()
+            except Exception as exc:
+                print(f"  [ERROR] Task {tasks[idx].id} raised: {exc}")
+                results[idx] = _FAIL_RESULT.copy()
+
+    return results
+
+
+def _find_newly_done_branches(dag: RecursiveDAG, previously_done: set) -> list:
+    """Find parent (branch) tasks that just transitioned to 'done' after propagation."""
+    newly_done = []
+    for task in dag.tasks.values():
+        if task.status == "done" and task.children and task.id not in previously_done:
+            newly_done.append(task)
+    return newly_done
+
+
+def execute_recursive_dag(
+    dag: RecursiveDAG,
+    goal: str,
+    budget: BudgetTracker,
+    kanban=None,
+) -> None:
+    """Recursive DAG execution loop with retry tracking, verification dispatch, and failure handling.
+
+    Parameters
+    ----------
+    dag:    The recursive DAG to execute.
+    goal:   The top-level goal string (for prompt context).
+    budget: Budget tracker for cost accounting and circuit breaking.
+    kanban: Optional dict with 'goal' and 'start_time' for kanban output.
+            When provided, kanban.json is updated after each batch.
+    """
+    execution_retries: dict = {}  # task_id -> retry count
+    start_time = kanban.get("start_time", time.time()) if kanban else time.time()
+    kanban_goal = kanban.get("goal", goal) if kanban else goal
+
+    # Track which branch tasks are already done (to detect newly-done branches)
+    done_branches: set = {
+        t.id for t in dag.tasks.values()
+        if t.status == "done" and t.children
+    }
+
+    batch_num = 0
+
+    while True:
+        ready = dag.get_ready_leaves()
+        if not ready:
+            break
+        if not budget.can_afford():
+            print(f"\n[BUDGET EXHAUSTED] Remaining: ${budget.remaining():.4f}. Stopping recursive execution.")
+            break
+
+        batch_num += 1
+        parallel, sequential = dag.get_parallel_groups(ready)
+
+        print(f"\n{'─'*40}")
+        print(f"Batch {batch_num} | {len(parallel)} parallel + {len(sequential)} sequential | "
+              f"Budget ${budget.remaining():.2f}")
+        print(f"{'─'*40}")
+
+        # --- Execute parallel leaves ---
+        if parallel:
+            print(f"  Executing {len(parallel)} task(s) in parallel: {[t.id for t in parallel]}")
+            for t in parallel:
+                t.status = "running"
+            results = _execute_leaf_parallel(parallel, goal, budget, dag)
+
+            for task, result in zip(parallel, results):
+                success = result.get("success", False)
+                task.cost_usd += result.get("cost_usd", 0.0)
+
+                if success:
+                    # L1 verification
+                    l1_pass = run_l1(task, budget)
+                    if l1_pass:
+                        commit_hash = checkpoint_commit(task, success=True)
+                        dag.mark_done(task.id, result)
+                        task.commit_hash = commit_hash
+                    else:
+                        # L1 failed — treat as task failure
+                        commit_hash = checkpoint_commit(task, success=False)
+                        task.commit_hash = commit_hash
+                        _handle_task_failure(
+                            task, dag, budget, execution_retries,
+                            f"L1 verification failed for {task.id}",
+                        )
+                else:
+                    commit_hash = checkpoint_commit(task, success=False)
+                    task.commit_hash = commit_hash
+                    error_msg = result.get("output", "")[:500]
+                    _handle_task_failure(
+                        task, dag, budget, execution_retries,
+                        f"Execution failed: {error_msg}",
+                    )
+
+        # --- Execute sequential leaves one by one ---
+        for task in sequential:
+            if not budget.can_afford():
+                print(f"\n[BUDGET EXHAUSTED] Remaining: ${budget.remaining():.4f}. Stopping.")
+                break
+
+            print(f"\n  Executing task sequentially: {task.id}")
+            task.status = "running"
+            contracts_text = load_relevant_contracts(task, dag)
+            result = execute_leaf_task(task, goal, budget, contracts_text)
+            success = result.get("success", False)
+            task.cost_usd += result.get("cost_usd", 0.0)
+
+            if success:
+                l1_pass = run_l1(task, budget)
+                if l1_pass:
+                    commit_hash = checkpoint_commit(task, success=True)
+                    dag.mark_done(task.id, result)
+                    task.commit_hash = commit_hash
+                else:
+                    commit_hash = checkpoint_commit(task, success=False)
+                    task.commit_hash = commit_hash
+                    _handle_task_failure(
+                        task, dag, budget, execution_retries,
+                        f"L1 verification failed for {task.id}",
+                    )
+            else:
+                commit_hash = checkpoint_commit(task, success=False)
+                task.commit_hash = commit_hash
+                error_msg = result.get("output", "")[:500]
+                _handle_task_failure(
+                    task, dag, budget, execution_retries,
+                    f"Execution failed: {error_msg}",
+                )
+
+        # --- Propagate status (children all done → parent done) ---
+        dag.propagate_status()
+
+        # --- Verify newly-completed branch nodes by complexity ---
+        newly_done = _find_newly_done_branches(dag, done_branches)
+        for branch in newly_done:
+            done_branches.add(branch.id)
+            print(f"\n  [Branch] {branch.id} completed (complexity={branch.complexity})")
+
+            if branch.complexity >= 3:
+                l2_pass = run_l2(branch, budget)
+                if not l2_pass:
+                    print(f"  [Branch] {branch.id}: L2 review failed")
+
+            if branch.complexity >= 5:
+                l3_pass = run_l3(branch, budget)
+                if not l3_pass:
+                    print(f"  [Branch] {branch.id}: L3 test suite failed")
+
+        # --- Update kanban ---
+        if kanban is not None:
+            _save_kanban(dag, kanban_goal, start_time)
+
+        # --- Status report ---
+        print(f"\n--- DAG Status ---\n{dag.summary()}\n"
+              f"Budget: {budget.summary()}\n------------------")
+
+    # Final check
+    if dag.all_done():
+        print("\n  All tasks completed.")
+    else:
+        pending = [t for t in dag.tasks.values() if t.status == "pending"]
+        failed = [t for t in dag.tasks.values() if t.status == "failed"]
+        if pending:
+            print(f"\n  {len(pending)} task(s) still pending.")
+        if failed:
+            print(f"\n  {len(failed)} task(s) failed.")
+
+
+def _handle_task_failure(
+    task: RecursiveTask,
+    dag: RecursiveDAG,
+    budget: BudgetTracker,
+    execution_retries: dict,
+    error_context: str,
+) -> None:
+    """Handle a task failure: retry or replan.
+
+    Maintains execution_retries dict. If retries < max_retries, resets task
+    to 'pending' for retry. Otherwise, marks failed and attempts replan_subtree.
+    If replan also fails, marks [FAILED] and continues.
+    """
+    task_id = task.id
+    execution_retries[task_id] = execution_retries.get(task_id, 0) + 1
+    retries = execution_retries[task_id]
+
+    print(f"  [Failure] {task_id}: attempt {retries}/{task.max_retries} — {error_context[:200]}")
+
+    if retries < task.max_retries:
+        # Retry: reset to pending so get_ready_leaves picks it up again
+        task.status = "pending"
+        print(f"  [Retry] {task_id}: resetting to pending for retry")
+    else:
+        # Max retries exhausted — mark failed and try replan
+        dag.mark_failed(task_id, error_context)
+        print(f"  [Replan] {task_id}: max retries exhausted, attempting replan...")
+
+        replan_ok = replan_subtree(task, dag, error_context, budget)
+        if not replan_ok:
+            # Replan also failed — task stays failed, continue other branches
+            print(f"  [FAILED] {task_id}: replan failed, skipping task")
+            checkpoint_commit(task, success=False)
+
+
 # ============================================================
 # Main Loop
 # ============================================================
