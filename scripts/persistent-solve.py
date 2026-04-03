@@ -48,6 +48,7 @@ DEFAULT_MAX_ROUNDS = 10
 DEFAULT_MAX_TIME = 7200      # 2 hours
 MAX_CONSECUTIVE_NO_PROGRESS = 3
 MAX_RECURSION_DEPTH = 5
+MAX_BATCH_SIZE = 5             # Max C:1-2 tasks per batch call
 WIP_DIR = ".claude-flow"
 WIP_FILE = f"{WIP_DIR}/wip.md"
 CONTRACTS_DIR = f"{WIP_DIR}/contracts"
