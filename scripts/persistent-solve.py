@@ -2455,9 +2455,17 @@ def _run_dag_mode(
             print("  Rebuilding DAG with failure context for next round...")
 
         if pending:
-            # Budget ran out mid-DAG — stop, user can re-run
-            print(f"  {len(pending)} tasks still pending (likely budget exhausted).")
-            break
+            if not budget.can_afford():
+                # Budget truly exhausted — stop
+                print(f"  {len(pending)} tasks still pending (budget exhausted).")
+                break
+            # Tasks pending due to failed dependencies — rebuild DAG and retry
+            fail_ctx = "; ".join(
+                f"{t.id} failed: {(t.result or {}).get('output', '')[:100]}"
+                for t in failed
+            ) if failed else "some dependencies could not be resolved"
+            goal = f"{goal}\n\nPrevious attempt had failures:\n{fail_ctx}\nPlease adjust approach and complete remaining work."
+            print(f"  {len(pending)} tasks pending, {len(failed)} failed — rebuilding DAG for next round...")
     else:
         # Loop completed without break
         pass
