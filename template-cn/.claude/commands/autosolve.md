@@ -37,8 +37,8 @@ Replace `<goal>` with the user's $ARGUMENTS.
 
 | Flag | Description |
 |------|-------------|
-| `--max-budget-usd N` | Total budget cap (default: 5.0) |
-| `--per-task-budget N` | Per sub-task budget (default: 0.5) |
+| `--max-budget-usd N` | Total budget cap (default: 500.0) |
+| `--per-task-budget N` | Per sub-task budget (default: 10.0) |
 | `--max-rounds N` | Max execution rounds (default: 10) |
 | `--max-time N` | Max time in seconds (default: 7200) |
 | `--kanban-port N` | HTTP server port (default: 8420) |

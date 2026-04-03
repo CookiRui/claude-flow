@@ -5,7 +5,7 @@ Persistent Loop Scheduler — Atomic DAG execution with budget tracking.
 Usage:
     # DAG mode (default): plan sub-tasks, execute each atomically with budget control
     python scripts/persistent-solve.py "Stabilize game frame rate at 60fps"
-    python scripts/persistent-solve.py "Refactor auth system" --max-budget-usd 3.0 --per-task-budget 0.3
+    python scripts/persistent-solve.py "Refactor auth system" --max-budget-usd 100 --per-task-budget 5
 
     # Legacy mode: original WIP-handshake loop (one full session per round)
     python scripts/persistent-solve.py "Fix memory leak" --mode legacy
@@ -457,7 +457,7 @@ class Contract:
 class BudgetTracker:
     """Track cumulative costs across all claude sessions (thread-safe)."""
 
-    def __init__(self, max_budget_usd: float = 5.0, per_task_budget_usd: float = 0.5):
+    def __init__(self, max_budget_usd: float = 500.0, per_task_budget_usd: float = 10.0):
         self.max_budget = max_budget_usd
         self.per_task_budget = per_task_budget_usd
         self.total_spent = 0.0
@@ -2212,8 +2212,8 @@ def persistent_solve(
     goal: str,
     max_rounds: int,
     max_time: int,
-    max_budget_usd: float = 5.0,
-    per_task_budget_usd: float = 0.5,
+    max_budget_usd: float = 500.0,
+    per_task_budget_usd: float = 10.0,
     mode: str = "dag",
     skip_clarify: bool = False,
     recursive: bool = False,
@@ -2593,12 +2593,12 @@ def main():
         help=f"Maximum total time in seconds (default: {DEFAULT_MAX_TIME})"
     )
     parser.add_argument(
-        "--max-budget-usd", type=float, default=5.0,
-        help="Maximum total budget in USD (default: 5.0)"
+        "--max-budget-usd", type=float, default=500.0,
+        help="Maximum total budget in USD (default: 500.0)"
     )
     parser.add_argument(
-        "--per-task-budget", type=float, default=0.5,
-        help="Maximum budget per sub-task in USD (default: 0.5)"
+        "--per-task-budget", type=float, default=10.0,
+        help="Maximum budget per sub-task in USD (default: 10.0)"
     )
     parser.add_argument(
         "--mode", choices=["dag", "legacy"], default="dag",
