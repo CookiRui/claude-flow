@@ -2169,12 +2169,19 @@ def _run_dag_mode(
         goal = clarify_goal(goal, budget)
         original_goal = goal
 
-    # Prepare kanban state if requested
+    # Prepare kanban state if requested — write an initial "planning" state
+    # immediately so the web viewer doesn't 404 during the planning phase.
     kanban_state = None
     kanban_out = None
     if kanban:
         kanban_out = kanban_path or os.path.join(WIP_DIR, "kanban.json")
         kanban_state = KanbanState(goal)
+        kanban_state.summary = {
+            "total": 0, "done": 0, "failed": 0,
+            "running": 0, "pending": 0, "total_cost_usd": 0.0,
+            "phase": "planning",
+        }
+        kanban_state.save(kanban_out)
 
     dag = None  # Will be set in the loop; used after loop for summary
 
