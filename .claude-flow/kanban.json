@@ -1,94 +1,21 @@
 {
   "goal": "给 E:/Work/Cooki/ClaudeCode/knowledge-base 做一个 Web 知识管理系统，仅本地运行，不考虑认证。要求：浏览所有 markdown 文档，支持目录和标签导航，类似维基百科的双向链接跳转，全文搜索，以及简单的文档编辑能力。代码输出到 E:/Work/Cooki/ClaudeCode/knowledge-base/web/ 目录",
   "start_time": "2026-04-04T00:13:13.523290",
-  "updated_at": "2026-04-04T01:56:49.605001",
+  "updated_at": "2026-04-04T01:59:08.356772",
   "summary": {
-    "total": 9,
-    "done": 3,
-    "failed": 1,
+    "total": 1,
+    "done": 0,
+    "failed": 0,
     "running": 0,
-    "pending": 5,
-    "total_cost_usd": 3.2897
+    "pending": 1,
+    "total_cost_usd": 0.0
   },
   "tree": [
     {
-      "id": "verify-and-fix-all",
-      "description": "Run the Flask app, verify every feature end-to-end (tree, tags, search, doc view, wikilinks, backlinks, editor, hamburger), and fix any remaining issues in app.py, app.js, style.css, and index.html",
+      "id": "e2e-verify-fix",
+      "description": "Run the Flask app, test every API endpoint and fix any remaining issues in app.py, app.js, style.css, and index.html",
       "status": "pending",
-      "complexity": 3,
-      "cost_usd": 0.925203,
-      "commit_hash": "e96fe1f",
-      "children": [
-        {
-          "id": "verify-and-fix-all.verify-api-endpoints",
-          "description": "Test all Flask API endpoints (/api/tree, /api/doc, /api/tags, /api/search, /api/rebuild) using Flask test_client to confirm correct responses, status codes, and data shapes",
-          "status": "done",
-          "complexity": 2,
-          "cost_usd": 0.36569725000000003,
-          "commit_hash": "1798ec2",
-          "children": []
-        },
-        {
-          "id": "verify-and-fix-all.verify-js-syntax-and-boot",
-          "description": "Validate app.js has no syntax errors (node --check), verify all DOM element IDs referenced in JS exist in index.html, and confirm the app serves index.html at /",
-          "status": "done",
-          "complexity": 1,
-          "cost_usd": 0.6414077499999999,
-          "commit_hash": "5c2608b",
-          "children": []
-        },
-        {
-          "id": "verify-and-fix-all.fix-tree-and-navigation",
-          "description": "Verify tree rendering: /api/tree returns correct structure, JS buildTreeNode creates clickable items that call loadDoc, and clicking a file in the tree loads the document",
-          "status": "done",
-          "complexity": 1,
-          "cost_usd": 0.40965474999999996,
-          "commit_hash": "0173d51",
-          "children": []
-        },
-        {
-          "id": "verify-and-fix-all.fix-search-and-tags",
-          "description": "Verify search: typing in search input triggers debounced fetch, results appear in dropdown, clicking a result calls loadDoc and clears input. Verify tags: tag cloud renders, clicking a tag filters the tree, clicking again clears filter.",
-          "status": "pending",
-          "complexity": 2,
-          "cost_usd": 0.14148875000000002,
-          "commit_hash": null,
-          "children": []
-        },
-        {
-          "id": "verify-and-fix-all.fix-wikilinks-and-backlinks",
-          "description": "Verify wiki-link rendering: [[target]] in markdown becomes <a class='wiki-link' data-target='...'> in HTML. Verify JS click handler resolves target to a path and calls loadDoc. Verify backlinks panel populates from API response.",
-          "status": "pending",
-          "complexity": 2,
-          "cost_usd": 0.14148875000000002,
-          "commit_hash": null,
-          "children": []
-        },
-        {
-          "id": "verify-and-fix-all.fix-editor-and-hamburger",
-          "description": "Verify editor: edit button toggles textarea visibility and fetches raw content, save button POSTs to /api/doc and reloads, cancel hides editor. Verify hamburger: button toggles sidebar visibility on mobile.",
-          "status": "pending",
-          "complexity": 2,
-          "cost_usd": 0.14148875000000002,
-          "commit_hash": null,
-          "children": []
-        },
-        {
-          "id": "verify-and-fix-all.cleanup-dead-template",
-          "description": "Remove the unused templates/index.html Jinja2 file that is never served by any route",
-          "status": "failed",
-          "complexity": 1,
-          "cost_usd": 0.52329625,
-          "commit_hash": null,
-          "children": []
-        }
-      ]
-    },
-    {
-      "id": "commit-and-push",
-      "description": "Commit all web/ files and push to origin master",
-      "status": "pending",
-      "complexity": 1,
+      "complexity": 4,
       "cost_usd": 0.0,
       "commit_hash": null,
       "children": []
