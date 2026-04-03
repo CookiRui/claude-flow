@@ -1,138 +1,19 @@
 {
   "goal": "给 E:/Work/Cooki/ClaudeCode/knowledge-base 做一个 Web 知识管理系统，仅本地运行，不考虑认证。要求：浏览所有 markdown 文档，支持目录和标签导航，类似维基百科的双向链接跳转，全文搜索，以及简单的文档编辑能力。代码输出到 E:/Work/Cooki/ClaudeCode/knowledge-base/web/ 目录",
   "start_time": "2026-04-04T00:13:13.523290",
-  "updated_at": "2026-04-04T00:58:13.384233",
+  "updated_at": "2026-04-04T01:01:43.041803",
   "summary": {
-    "total": 15,
-    "done": 2,
+    "total": 5,
+    "done": 0,
     "failed": 0,
     "running": 0,
-    "pending": 13,
-    "total_cost_usd": 2.6991
+    "pending": 5,
+    "total_cost_usd": 0.0
   },
   "tree": [
     {
-      "id": "fix-html-shell",
-      "description": "Fix static/index.html to add missing element IDs (doc-content, editor elements) and ensure all containers match what JS expects",
-      "status": "done",
-      "complexity": 2,
-      "cost_usd": 0.20067049999999997,
-      "commit_hash": "200cfa0",
-      "children": []
-    },
-    {
-      "id": "frontend-tree-tags",
-      "description": "Implement directory tree rendering (recursive collapsible file browser) and tag cloud rendering with click-to-filter in app.js",
-      "status": "pending",
-      "complexity": 3,
-      "cost_usd": 0.78359775,
-      "commit_hash": "39673aa",
-      "children": [
-        {
-          "id": "frontend-tree-tags.frontend-tree-render",
-          "description": "Implement fetchTree() → renderTree() pipeline: fetch /api/tree, build recursive collapsible folder/file DOM nodes in #tree-container, with expand/collapse on folder click",
-          "status": "done",
-          "complexity": 1,
-          "cost_usd": 0.30816750000000004,
-          "commit_hash": "a1a8e17",
-          "children": []
-        },
-        {
-          "id": "frontend-tree-tags.frontend-tree-doc-click",
-          "description": "Wire file node clicks to loadDoc(): clicking a .tree-doc calls loadDoc(path), highlights active doc, and auto-expands parent folders to reveal it",
-          "status": "pending",
-          "complexity": 1,
-          "cost_usd": 0.0,
-          "commit_hash": null,
-          "children": []
-        },
-        {
-          "id": "frontend-tree-tags.frontend-tag-cloud-render",
-          "description": "Implement fetchTags() → renderTagCloud() pipeline: fetch /api/tags, render .tag-pill spans in #tag-cloud showing tag name and count",
-          "status": "pending",
-          "complexity": 1,
-          "cost_usd": 0.0623719,
-          "commit_hash": null,
-          "children": []
-        },
-        {
-          "id": "frontend-tree-tags.frontend-tag-filter",
-          "description": "Implement click-to-filter: clicking a tag pill fetches /api/tags/{tag} for matching doc paths, re-renders the tree showing only matching files; clicking again clears the filter",
-          "status": "pending",
-          "complexity": 2,
-          "cost_usd": 0.0,
-          "commit_hash": null,
-          "children": []
-        },
-        {
-          "id": "frontend-tree-tags.frontend-fix-backlinks-mismatch",
-          "description": "Fix backlinks rendering: backend returns [{path, title}] objects but loadDoc treats them as plain strings — update to use bl.path and bl.title",
-          "status": "pending",
-          "complexity": 1,
-          "cost_usd": 0.0623719,
-          "commit_hash": null,
-          "children": []
-        },
-        {
-          "id": "frontend-tree-tags.frontend-fix-css-tree-indent",
-          "description": "Fix CSS double-padding: .tree-node has padding-left:14px conflicting with .tree-children padding-left:14px — remove the duplicate so tree indentation is correct",
-          "status": "pending",
-          "complexity": 1,
-          "cost_usd": 0.30816750000000004,
-          "commit_hash": null,
-          "children": []
-        }
-      ]
-    },
-    {
-      "id": "frontend-doc-view",
-      "description": "Implement document display (rendered HTML, metadata, backlinks panel, wiki-link navigation) and search result interaction",
-      "status": "pending",
-      "complexity": 3,
-      "cost_usd": 0.53962075,
-      "commit_hash": null,
-      "children": [
-        {
-          "id": "frontend-doc-view.fix-backlinks-render",
-          "description": "Fix backlinks rendering to handle {path, title} objects from API instead of plain strings",
-          "status": "pending",
-          "complexity": 1,
-          "cost_usd": 0.0623719,
-          "commit_hash": null,
-          "children": []
-        },
-        {
-          "id": "frontend-doc-view.fix-wikilink-navigation",
-          "description": "Ensure wiki-link click handler matches the actual HTML attributes emitted by the backend markdown renderer",
-          "status": "pending",
-          "complexity": 1,
-          "cost_usd": 0.0623719,
-          "commit_hash": null,
-          "children": []
-        },
-        {
-          "id": "frontend-doc-view.fix-tag-filter-endpoint",
-          "description": "Verify /api/tags/<tag> endpoint exists in backend; if missing, either add it or refactor toggleTagFilter() to use client-side filtering from cached tree data",
-          "status": "pending",
-          "complexity": 2,
-          "cost_usd": 0.0623719,
-          "commit_hash": null,
-          "children": []
-        },
-        {
-          "id": "frontend-doc-view.fix-search-result-click",
-          "description": "Ensure search result click handler uses correct response fields (path, title, snippet) matching the backend /api/search response format",
-          "status": "pending",
-          "complexity": 1,
-          "cost_usd": 0.24702925000000003,
-          "commit_hash": null,
-          "children": []
-        }
-      ]
-    },
-    {
-      "id": "frontend-editor",
-      "description": "Implement inline markdown editor with save functionality (toggle edit mode, textarea with raw markdown, save via POST /api/doc)",
+      "id": "fix-serving",
+      "description": "Fix Flask app to serve static/index.html directly instead of the minimal Jinja2 template, ensuring the full UI loads correctly",
       "status": "pending",
       "complexity": 2,
       "cost_usd": 0.0,
@@ -140,8 +21,35 @@
       "children": []
     },
     {
+      "id": "fix-frontend-js",
+      "description": "Fix all broken frontend JS: wikilink click navigation, search result clicks, tag filter with tree rebuild, backlinks rendering, editor toggle/save/cancel, and hamburger menu toggle",
+      "status": "pending",
+      "complexity": 4,
+      "cost_usd": 0.0,
+      "commit_hash": null,
+      "children": []
+    },
+    {
+      "id": "fix-frontend-css",
+      "description": "Fix CSS issues: tree indentation for nested folders, tag cloud active state, backlinks panel styling, editor container layout, and mobile responsive hamburger overlay",
+      "status": "pending",
+      "complexity": 3,
+      "cost_usd": 0.0,
+      "commit_hash": null,
+      "children": []
+    },
+    {
+      "id": "fix-backend-api",
+      "description": "Fix backend API endpoints: ensure /api/search returns correct format with snippets, /api/doc POST saves content and rebuilds index, /api/tags/<name> returns filtered doc list, and wikilink HTML output uses correct CSS class and data attributes for JS click handling",
+      "status": "pending",
+      "complexity": 3,
+      "cost_usd": 0.0,
+      "commit_hash": null,
+      "children": []
+    },
+    {
       "id": "integration-test",
-      "description": "Start the Flask server, verify all pages load, test tree/tag/search/doc-view/edit/wiki-link flows end-to-end, fix any remaining issues",
+      "description": "Start the server, manually verify all features work end-to-end: tree navigation, doc loading, wikilinks, search, tags, backlinks, editor save, then commit and push",
       "status": "pending",
       "complexity": 3,
       "cost_usd": 0.0,
