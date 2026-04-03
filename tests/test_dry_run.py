@@ -24,10 +24,11 @@ clarify_goal = ps.clarify_goal
 
 
 # ============================================================
-# Helpers
+# Fixtures
 # ============================================================
 
-def _make_synthetic_dag() -> RecursiveDAG:
+@pytest.fixture
+def synthetic_dag() -> RecursiveDAG:
     """Build a minimal RecursiveDAG with one task for testing."""
     task = RecursiveTask(
         id="t1",
@@ -49,9 +50,8 @@ class TestDryRun:
 
     @patch.object(ps, "execute_dag")
     @patch.object(ps, "plan_dag")
-    def test_dry_run_skips_execution(self, mock_plan_dag, mock_execute_dag):
+    def test_dry_run_skips_execution(self, mock_plan_dag, mock_execute_dag, synthetic_dag):
         """When dry_run=True, plan_dag is called but execute_dag is NOT."""
-        synthetic_dag = _make_synthetic_dag()
         mock_plan_dag.return_value = synthetic_dag
 
         budget = BudgetTracker(max_dollars=1.0)
