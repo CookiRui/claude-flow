@@ -64,6 +64,7 @@ TEMPLATE_ITEMS = [
 SCRIPT_ITEMS = [
     "scripts/persistent-solve.py",
     "scripts/repo-map.py",
+    "scripts/scope-loader.py",
     "scripts/lint-feedback.sh",
 ]
 

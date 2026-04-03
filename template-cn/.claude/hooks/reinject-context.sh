@@ -50,6 +50,27 @@ main() {
         echo "[reinject-context] 警告：$CONSTITUTION_FILE 未找到——跳过。" >&2
     fi
 
+    # --- 注入 L0 代码地图（如已生成） ---
+    L0_FILE=".repo-map/L0.md"
+    if [ -f "$L0_FILE" ]; then
+        echo "--- [code-map L0: $L0_FILE] ---"
+        cat "$L0_FILE"
+        echo ""
+    fi
+
+    # --- 注入模块级作用域规则 ---
+    if [ -f "$WIP_FILE" ]; then
+        ACTIVE_FILES=$(grep -A 50 "## Active Files" "$WIP_FILE" 2>/dev/null \
+            | grep "^- " | sed 's/^- //' | sed 's/ (.*//' | tr '\n' ',' | sed 's/,$//')
+        if [ -n "$ACTIVE_FILES" ]; then
+            SCOPE_OUTPUT=$(python scripts/scope-loader.py --files "$ACTIVE_FILES" --format inject 2>/dev/null || true)
+            if [ -n "$SCOPE_OUTPUT" ]; then
+                echo "$SCOPE_OUTPUT"
+                echo ""
+            fi
+        fi
+    fi
+
     # 重新注入 WIP（如存在）
     if [ -f "$WIP_FILE" ]; then
         echo "--- [进行中工作: $WIP_FILE] ---"

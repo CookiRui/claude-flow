@@ -73,7 +73,9 @@ Output your classification and reasoning.
    - Load relevant Skills
 
    **Layer B — Codebase understanding:**
-   - Run `python scripts/repo-map.py --format md --no-refs` if available (generates code map)
+   - Run `python scripts/repo-map.py --incremental` to update layered code map
+   - Read `.repo-map/L0.md` for project overview; read `.repo-map/modules/{module}.md` (L1) for affected modules
+   - Run `python scripts/scope-loader.py --format inject` to load module-scoped rules (if any)
    - Identify existing scripts/modules that serve a similar purpose to the goal — search for overlapping keywords, function names, or file patterns. If found, read them and note:
      - What conventions they follow (module detection logic, output formats, CLI patterns)
      - What other files consume their output (grep for script name in hooks, commands, agents)
@@ -83,11 +85,13 @@ Output your classification and reasoning.
    - Map the "consumer chain": who will call/consume the output of what you're building?
      - Read `.claude/hooks/` — how are scripts invoked at runtime?
      - Read `.claude/agents/` and `.claude/commands/` — which agents/commands reference related scripts?
+     - Read `install.py` and `bin/` — how are scripts distributed?
    - Identify **all files that must change together** with the core deliverable:
      - Hook files that need to call the new script
      - Agent/command files that reference the script
-     - Config files (`.gitignore`, `.claudeignore`) if new generated directories are introduced
-     - Documentation if public-facing functionality changes
+     - `template/` and `template-cn/` if the changed files have template counterparts
+     - `.gitignore` / `.claudeignore` if new generated directories are introduced
+     - `README.md` if public-facing functionality changes
    - Record these as **mandatory integration targets** — they MUST appear as DAG nodes in Phase 2
 
 5. **Read historical learnings**: Read `.claude-flow/learnings/INDEX.md` if it exists.

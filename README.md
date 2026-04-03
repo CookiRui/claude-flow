@@ -14,7 +14,7 @@
 **特点**：
 - 一条命令自动分析项目并生成所有配置，无需手动填写
 - 3 个专业化 Agent 模板（功能实现、代码审查、对抗测试）
-- 3 个实用工具脚本（持久化循环、代码地图、Lint 反馈闭环）
+- 4 个实用工具脚本（持久化循环、分层代码地图、模块级规则加载、Lint 反馈闭环）
 - 防护 Hooks（文件保护 + compact 后上下文恢复）+ deny 权限模板
 - CI/CD 模板（GitHub Actions 构建/测试 + AI 代码审查）
 - 代码审查标准模板（REVIEW.md，3 维度 × 3 级别）
@@ -82,6 +82,9 @@ python install.py /path/to/your-project --preset unity  # 核心 + Unity
 # DAG 模式（默认）：自动分解为子任务，原子化执行，费用追踪
 python scripts/persistent-solve.py "重构整个数据层架构"
 
+# 递归 DAG 模式：按复杂度递归拆解 + 看板输出
+python scripts/persistent-solve.py "重构整个数据层架构" --recursive
+
 # 控制预算
 python scripts/persistent-solve.py "重构整个数据层架构" --max-budget-usd 3.0 --per-task-budget 0.3
 ```
@@ -146,6 +149,10 @@ presets/                               # 引擎专属叠加层
 python scripts/persistent-solve.py "让游戏帧率稳定 60fps"
 python scripts/persistent-solve.py "重构认证系统" --max-budget-usd 3.0 --per-task-budget 0.3
 
+# 递归 DAG 模式：自动按复杂度递归拆解，直到所有叶子任务 ≤5 分钟
+python scripts/persistent-solve.py "重构整个数据层架构" --recursive
+python scripts/persistent-solve.py "重构整个数据层架构" --recursive --verify-level l2
+
 # Legacy 模式：原始 WIP 握手循环（一轮一个完整会话）
 python scripts/persistent-solve.py "修复内存泄漏" --mode legacy
 
@@ -159,19 +166,71 @@ python scripts/persistent-solve.py "目标" --max-rounds 5 --max-time 3600
 - **并行执行**：无文件冲突的子任务通过 `ThreadPoolExecutor` 进程级并行
 - **熔断保护**：预算、时间、轮次、无进展检测四重熔断
 
+**递归 DAG 模式**（`--recursive`）在 DAG 模式基础上增加递归拆解能力：
+- **递归拆解**：按复杂度自动收敛（C≤2 停止，C≥3 继续递归），硬上限 5 层深度
+- **原子提交**：每个叶子任务产出一个独立 checkpoint commit
+- **验证分级**：按复杂度自动选择验证级别（C:1-2 → L1，C:3-4 → L1+L2，C:5 → L1+L2+L3）
+- **局部重规划**：失败时只重新拆解失败节点及其下游，不影响已完成的分支
+- **看板输出**：实时写 `kanban.json` + 终端树形进度显示
+
+**看板输出**（`kanban.json`）：执行过程中自动生成 `.claude-flow/kanban.json`，包含任务树结构、状态汇总（total/done/failed/pending/running）和费用追踪（total_cost_usd）。终端同步显示树形进度：
+```
+[running] 重构整个数据层架构  ($2.34)
+├─ [done] T1: 数据模型重构  ($0.40)  abc1234
+│  ├─ [done] T1.1: 实体定义  ($0.15)  def5678
+│  └─ [done] T1.2: 关系映射  ($0.25)  ghi9012
+├─ [running] T2: 查询层重写  ($0.80)
+└─ [pending] T3: 迁移脚本
+```
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--recursive` | `False` | 启用递归 DAG 拆解（显式 opt-in） |
+| `--kanban` | `True` | 启用看板输出（终端树形 + JSON 文件） |
+| `--kanban-path PATH` | `.claude-flow/kanban.json` | 看板 JSON 输出路径 |
+| `--verify-level` | `auto` | 验证级别覆盖（`auto`\|`l1`\|`l2`\|`l3`，auto = 按复杂度分级） |
+
 **Legacy 模式** 保留原始行为：每轮一个完整 Claude 会话，通过 `.claude-flow/wip.md` 在会话间传递进度。
 
 > **何时用 `/deep-task` vs `persistent-solve.py`**：大多数 L 级任务，`/deep-task` 在单会话内就能完成（并行 Agent + 模型路由）。只有真正超出单会话预算的 XL 级任务才需要 `persistent-solve.py`。
 
-### repo-map.py — 代码地图生成器
+### repo-map.py — 分层代码地图生成器
 
 ```bash
-python scripts/repo-map.py /path/to/project              # 输出 .repo-map.json
-python scripts/repo-map.py /path/to/project --format md   # 输出 .repo-map.md
-python scripts/repo-map.py /path/to/project --no-refs     # 大项目跳过引用计数
+# 分层模式（默认）：生成 L0 全局概览 + L1 模块级符号索引
+python scripts/repo-map.py /path/to/project
+python scripts/repo-map.py /path/to/project --incremental   # 增量更新（基于 git diff）
+python scripts/repo-map.py /path/to/project --level L0      # 仅生成 L0
+python scripts/repo-map.py /path/to/project --level L1 --module auth  # 仅生成某模块 L1
+python scripts/repo-map.py /path/to/project --list-modules   # 列出检测到的模块
+
+# 传统平面模式（向后兼容）
+python scripts/repo-map.py /path/to/project --format md      # 输出 .repo-map.md
+python scripts/repo-map.py /path/to/project --format json     # 输出 .repo-map.json
 ```
 
-提取类/函数/方法定义，排序引用关系。在大型任务前生成，减少 50-70% 搜索 token。
+**分层输出**（`.repo-map/` 目录）：
+- **L0**（`L0.md`）— 全局概览：模块表格 + 跨模块依赖 + 关键入口点（<100 行，始终注入上下文）
+- **L1**（`modules/{name}.md`）— 模块级符号索引：按文件分组的类/函数/方法（<200 行，按需加载）
+- **L2** — 按需展开：直接读取源文件（无需生成）
+
+**增量更新**：`--incremental` 基于 git diff 仅重扫变更文件，与缓存合并，大幅减少重建时间。
+**模块自动检测**：从顶级目录自动检测模块，支持 `config.json` 手动配置。
+
+### scope-loader.py — 模块级作用域规则加载器
+
+```bash
+python scripts/scope-loader.py                                    # 从 git diff 自动检测
+python scripts/scope-loader.py --files "net/client.py,ui/app.py"  # 指定文件
+python scripts/scope-loader.py --module networking                 # 指定模块
+python scripts/scope-loader.py --format json                      # JSON 输出
+python scripts/scope-loader.py --format inject                    # stdout 注入（默认）
+```
+
+根据 git diff 影响范围，自动加载相关模块的 constitution 和 rules。支持：
+- **模块检测**：与 repo-map.py 共享模块边界（顶级目录 + config.json 配置）
+- **继承机制**：模块 constitution 叠加根级约束（不替换），可添加模块特有规则
+- **输出格式**：inject（stdout 注入，供 hook 使用）或 JSON（供程序消费）
 
 ### lint-feedback.sh — 双向 Lint/Test 反馈闭环
 
@@ -235,7 +294,7 @@ unity-ops.sh            → UnityOpsRunner → 场景/预制体/材质操作 →
 | 费用预算控制     | `--max-budget-usd` 实际费用追踪 + 熔断 | 无                            | 无                           |
 | 自主执行引擎     | 8 层 `/deep-task`（DAG→并行Agent→验证→元学习）| 无                       | 无                           |
 | 一键初始化       | `/init-project` 自动分析生成           | 无                            | 手动配置                     |
-| 跨会话持久化     | 原子化 DAG 调度 + WIP + 费用追踪       | 无                            | 无                           |
+| 跨会话持久化     | 递归 DAG 调度 + 看板输出 + WIP + 费用追踪 | 无                            | 无                           |
 | 验证体系         | 三级 + 多 Agent 对抗循环（Reviewer↔Executor 收敛）| 无                     | 无                           |
 | 内置 TDD 强制    | ✅ 通过宪法强制执行                     | ❌                            | ❌                           |
 

@@ -28,8 +28,12 @@ Before writing a single line of code:
    - What is explicitly out of scope.
    - Integration points with existing code (which modules are touched?).
    - Key edge cases and failure modes.
-3. Run `python scripts/repo-map.py --format md --no-refs` to get a code map.
-4. Read the files most likely to be affected. Do not modify anything yet.
+3. Run `python scripts/repo-map.py --incremental` to update layered code map.
+4. Read `.repo-map/L0.md` for project overview.
+5. Identify which modules are affected by this feature.
+6. Read `.repo-map/modules/{module}.md` (L1) for each affected module.
+7. Run `python scripts/scope-loader.py --module {module} --format inject` to load module-scoped constitution and rules.
+8. Read the files most likely to be affected. Do not modify anything yet.
 5. Output a one-paragraph understanding summary. If confidence < 0.8, ask clarifying questions before continuing.
 
 ---

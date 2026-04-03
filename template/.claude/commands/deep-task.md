@@ -65,10 +65,30 @@ Output your classification and reasoning.
    - Are there hidden tradeoffs? If yes → notify user.
    - Confidence < 0.3 → present options and let user decide direction.
 
-4. **Build context**:
+4. **Build context** (three layers: constraints → codebase → integration):
+
+   **Layer A — Constraints:**
    - Read constitution (`.claude/constitution.md`)
-   - Run `python scripts/repo-map.py --format md --no-refs` if available (generates code map)
+   - Read all rules in `.claude/rules/*.md`
    - Load relevant Skills
+
+   **Layer B — Codebase understanding:**
+   - Run `python scripts/repo-map.py --format md --no-refs` if available (generates code map)
+   - Identify existing scripts/modules that serve a similar purpose to the goal — search for overlapping keywords, function names, or file patterns. If found, read them and note:
+     - What conventions they follow (module detection logic, output formats, CLI patterns)
+     - What other files consume their output (grep for script name in hooks, commands, agents)
+     - Reuse their patterns instead of inventing new ones
+
+   **Layer C — Integration surface:**
+   - Map the "consumer chain": who will call/consume the output of what you're building?
+     - Read `.claude/hooks/` — how are scripts invoked at runtime?
+     - Read `.claude/agents/` and `.claude/commands/` — which agents/commands reference related scripts?
+   - Identify **all files that must change together** with the core deliverable:
+     - Hook files that need to call the new script
+     - Agent/command files that reference the script
+     - Config files (`.gitignore`, `.claudeignore`) if new generated directories are introduced
+     - Documentation if public-facing functionality changes
+   - Record these as **mandatory integration targets** — they MUST appear as DAG nodes in Phase 2
 
 5. **Read historical learnings**: Read `.claude-flow/learnings/INDEX.md` if it exists.
    - Identify the domain(s) relevant to this task, read only those domain files (not all)
@@ -127,8 +147,61 @@ Before proceeding, verify:
 - [ ] **Verifiable**: each acceptance criterion can be checked automatically?
 - [ ] **Granularity**: each task ≤ 5 minutes? If not, split further.
 - [ ] **Dependencies**: DAG is acyclic and correctly ordered?
+- [ ] **Integration completeness**: every mandatory integration target from Phase 1 Layer C has a corresponding DAG node? If any integration target is missing, add it now — this is the #1 cause of "code works but isn't wired in" failures.
+- [ ] **Pattern consistency**: if Phase 1 Layer B found existing similar scripts, do the new scripts follow the same conventions (module detection, CLI interface, output format)? If not, justify the deviation.
 
 **XL tasks**: present DAG via `AskUserQuestion`, must wait for confirmation.
+
+### Integration Audit (automated gate)
+
+After the DAG is drafted and pre-checked, launch a **verification subagent** to catch integration gaps that the main context may have missed. This is NOT optional — it turns "hope it covers integration" into "prove it covers integration".
+
+```
+Agent(
+  model="sonnet",
+  prompt="You are an integration auditor. Your job is to verify that a task DAG
+covers ALL integration points — not just the core implementation.
+
+## Inputs
+- Goal: {goal description}
+- DAG: {full DAG with task IDs, files, acceptance criteria}
+- Integration targets from Phase 1 Layer C: {list of mandatory targets}
+
+## Your checks
+
+1. **Consumer coverage**: For each file being created/modified in the DAG,
+   grep the codebase for existing references to similar files. Check:
+   - Do any hooks (.claude/hooks/) need to call the new scripts?
+   - Do any agents (.claude/agents/) or commands (.claude/commands/) need updating?
+   - Does install.py or bin/ need to register the new scripts?
+
+2. **Template sync**: For each file under .claude/ being modified,
+   check if template/.claude/ and template-cn/.claude/ have counterparts.
+   If yes, verify DAG includes tasks to sync them.
+
+3. **Config files**: If the DAG creates new generated directories or output files,
+   verify DAG includes .gitignore/.claudeignore updates.
+
+4. **Documentation**: If the DAG changes public-facing CLI or functionality,
+   verify DAG includes README.md updates.
+
+5. **Pattern check**: Read existing scripts that serve similar purposes.
+   Compare their conventions (CLI args, output format, module detection)
+   with what the DAG proposes. Flag deviations.
+
+## Output format
+AUDIT_PASS — no gaps found
+AUDIT_FAIL — {numbered list of missing DAG nodes with specific files and reasons}
+
+Be strict. Every gap you miss will become a 'code works but isn't wired in' bug."
+)
+```
+
+**Rules:**
+- If `AUDIT_PASS` → proceed to Budget Gate
+- If `AUDIT_FAIL` → add missing nodes to the DAG, re-run Decomposition Pre-Check, then proceed
+- Do NOT re-run the audit after fixing — one round is sufficient to catch structural gaps
+- The audit subagent reads only, it does not modify any files
 
 ### Budget Gate
 
@@ -159,6 +232,18 @@ This is a rough estimate — label it as approximate. The goal is catching unexp
 ---
 
 ## Phase 3: Parallel Execution Loop
+
+### Worktree Detection
+
+Before executing, check if running in a git worktree:
+```
+if git rev-parse --git-dir 2>/dev/null | grep -q '/worktrees/'; then
+    WORKTREE=true   # Only commit locally, NEVER push to origin
+fi
+```
+When `WORKTREE=true`: all `git push` commands in this phase and Phase 5 are **skipped**. The worktree's changes are returned to the caller for review/merge.
+
+### Execution Loop
 
 ```
 while ready_tasks exist:

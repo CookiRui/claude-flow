@@ -79,6 +79,10 @@
 python scripts/persistent-solve.py "Stabilize game frame rate at 60fps"
 python scripts/persistent-solve.py "Refactor auth system" --max-budget-usd 3.0 --per-task-budget 0.3
 
+# 递归 DAG 模式 — 按复杂度自动递归拆解 + 看板输出
+python scripts/persistent-solve.py "Build battle system" --recursive
+python scripts/persistent-solve.py "Refactor auth" --recursive --verify-level l2 --kanban-path ./status.json
+
 # Legacy 模式 — 原始 WIP 握手循环
 python scripts/persistent-solve.py "Fix memory leak" --mode legacy
 
@@ -96,6 +100,10 @@ python scripts/persistent-solve.py "Goal" --max-rounds 5 --max-time 3600
 | `--per-task-budget` | 0.5 | 单个子任务预算上限（美元） |
 | `--max-rounds` | 10 | 最大轮次 |
 | `--max-time` | 7200 | 最大总时间（秒，默认 2 小时） |
+| `--recursive` | False | 启用递归 DAG 拆解（按复杂度自动收敛） |
+| `--kanban` | True | 启用看板输出（终端树形 + JSON 文件） |
+| `--kanban-path` | `.claude-flow/kanban.json` | 看板 JSON 输出路径 |
+| `--verify-level` | `auto` | 验证级别：`auto`、`l1`、`l2`、`l3` |
 
 ---
 
@@ -193,6 +201,134 @@ Final budget summary:
 - 单个子任务失败 → 自动重试（最多 2 次），换不同策略
 - 所有子任务失败 → 下一轮重新规划 DAG，注入失败上下文
 - 预算耗尽 → 停止，输出已完成和待完成的任务列表
+
+---
+
+## 递归 DAG 模式
+
+使用 `--recursive` 启用。在标准 DAG 模式基础上，增加按复杂度自动递归拆解的能力。
+
+### 工作原理
+
+递归模式根据每个子任务的复杂度评分（complexity 1-5）决定是否继续拆解：
+
+- **C ≤ 2**：叶子节点，直接执行
+- **C ≥ 3**：继续递归拆解为更细粒度的子任务
+- **硬上限**：最大递归深度 `MAX_RECURSION_DEPTH=5`，超过后强制作为叶子执行
+
+```
+recursive_plan(goal, depth=0)
+  ├─ Claude 拆解 → 子任务列表（含 complexity 评分）
+  ├─ 对每个 C≤2 的任务 → 叶子节点，停止
+  ├─ 对每个 C≥3 的任务 → 递归调用 recursive_plan(task, depth+1)
+  │    ├─ 生成契约文件 .claude-flow/contracts/{task-id}.md
+  │    └─ 链接 parent/children 关系
+  └─ 返回完整的 RecursiveDAG
+```
+
+### 契约文件
+
+递归拆解时，每个子 DAG 会生成接口契约文件（`.claude-flow/contracts/{task-id}.md`），描述该子任务的输入依赖、输出接口和架构约束。执行子任务时，父级和兄弟的契约会自动注入到 prompt 中，确保子任务间接口一致。
+
+### 局部重规划
+
+当子任务失败且重试耗尽时，不会重新规划整个 DAG，而是只重新拆解失败节点及其下游任务，保留已完成的工作。
+
+### 向后兼容
+
+不使用 `--recursive` 时，行为与原始 DAG 模式完全一致。递归模式是显式 opt-in。
+
+---
+
+## 看板输出（kanban.json）
+
+使用 `--kanban`（默认启用）开启。执行过程中实时写入 JSON 文件并在终端打印树形进度。
+
+### kanban.json 结构
+
+```json
+{
+  "goal": "Build battle system",
+  "start_time": "2026-04-02T10:00:00",
+  "updated_at": "2026-04-02T10:30:00",
+  "summary": {
+    "total": 25,
+    "done": 12,
+    "failed": 1,
+    "running": 3,
+    "pending": 9,
+    "total_cost_usd": 2.34
+  },
+  "tree": [
+    {
+      "id": "T1",
+      "description": "战斗系统",
+      "status": "running",
+      "complexity": 5,
+      "cost_usd": 1.20,
+      "children": [
+        {
+          "id": "T1.1",
+          "description": "伤害计算",
+          "status": "done",
+          "complexity": 3,
+          "commit": "abc1234",
+          "cost_usd": 0.40,
+          "children": [...]
+        }
+      ]
+    }
+  ]
+}
+```
+
+### 终端树形输出
+
+每个任务完成后，终端会打印带 box-drawing 字符的树形进度：
+
+```
+[running] Build battle system  ($2.34)
+├─ [running] T1: 战斗系统  ($1.20)
+│  ├─ [done] T1.1: 伤害计算  ($0.40)  abc1234
+│  │  ├─ [done] T1.1.1: 暴击公式  ($0.15)  def5678
+│  │  └─ [done] T1.1.2: 元素伤害  ($0.25)  ghi9012
+│  ├─ [running] T1.2: 护甲系统  ($0.30)
+│  └─ [pending] T1.3: 闪避判定
+├─ [done] T2: UI 框架  ($0.80)  jkl3456
+└─ [pending] T3: 存档系统
+```
+
+`summary` 字段包含：`total`（总任务数）、`done`（已完成）、`failed`（失败）、`running`（执行中）、`pending`（待执行）、`total_cost_usd`（累计费用）。
+
+---
+
+## 验证级别
+
+使用 `--verify-level` 控制验证强度。默认 `auto` 模式按任务复杂度自动分级。
+
+### 级别说明
+
+| 级别 | 触发条件（auto 模式） | 验证内容 |
+|------|----------------------|----------|
+| **L1** | 所有叶子任务（C:1-5） | 基础验证：代码能编译/解释、修改的文件存在、acceptance criteria 满足 |
+| **L2** | 分支节点完成且 C ≥ 3 | 对抗审查：Review → Fix 循环，检查子任务间接口一致性 |
+| **L3** | 分支节点完成且 C ≥ 5 | 端到端验证：集成测试、完整功能验证 |
+
+### 复杂度与验证的映射
+
+| 复杂度 | 验证级别（auto） | 说明 |
+|--------|-----------------|------|
+| C:1-2 | L1 | 简单任务，基础检查即可 |
+| C:3-4 | L1 + L2 | 中等复杂度，需要对抗审查确保子任务集成正确 |
+| C:5 | L1 + L2 + L3 | 高复杂度，需要端到端验证 |
+
+### 手动指定
+
+使用 `--verify-level l1|l2|l3` 可强制覆盖 auto 行为：
+
+- `--verify-level l1`：所有任务只做 L1 验证（快速但不够严格）
+- `--verify-level l2`：所有分支节点都做 L2 验证
+- `--verify-level l3`：所有分支节点都做 L3 验证（最严格但费用最高）
 
 ---
 
