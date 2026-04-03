@@ -2358,6 +2358,11 @@ def _run_dag_mode(
             print("  [DAG] No tasks generated. Stopping.")
             break
 
+        # Write kanban after planning completes (before execution)
+        if kanban_state:
+            kanban_state.update_from_dag(dag)
+            kanban_state.save(kanban_out)
+
         # Dry-run: print the plan and exit without executing
         if dry_run:
             print(f"\n{'='*60}")
