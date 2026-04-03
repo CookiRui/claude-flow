@@ -1,14 +1,14 @@
 {
   "goal": "给 E:/Work/Cooki/ClaudeCode/knowledge-base 做一个 Web 知识管理系统，仅本地运行，不考虑认证。要求：浏览所有 markdown 文档，支持目录和标签导航，类似维基百科的双向链接跳转，全文搜索，以及简单的文档编辑能力。代码输出到 E:/Work/Cooki/ClaudeCode/knowledge-base/web/ 目录",
   "start_time": "2026-04-04T00:13:13.523290",
-  "updated_at": "2026-04-04T01:22:26.491736",
+  "updated_at": "2026-04-04T01:30:49.201298",
   "summary": {
     "total": 20,
-    "done": 1,
+    "done": 2,
     "failed": 0,
     "running": 0,
-    "pending": 19,
-    "total_cost_usd": 3.6824
+    "pending": 18,
+    "total_cost_usd": 6.8581
   },
   "tree": [
     {
@@ -31,10 +31,10 @@
         {
           "id": "fix-frontend-js.fix-wikilink-nav",
           "description": "Fix wikilink click navigation: ensure rendered wiki-links have class='wiki-link' and data-target attribute from backend, and app.js resolves them to loadDoc()",
-          "status": "pending",
+          "status": "done",
           "complexity": 1,
-          "cost_usd": 0.0,
-          "commit_hash": null,
+          "cost_usd": 0.5250327499999999,
+          "commit_hash": "ae7abf4",
           "children": []
         },
         {
@@ -42,7 +42,7 @@
           "description": "Fix search result clicks: clicking a result loads the doc, clears the input, and hides the dropdown",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
+          "cost_usd": 0.09868230000000001,
           "commit_hash": null,
           "children": []
         },
@@ -51,7 +51,7 @@
           "description": "Fix tag cloud filter: clicking a tag pill fetches /api/tags/<tag>, rebuilds tree with allowed paths, toggles .active class on pill",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
+          "cost_usd": 0.09868230000000001,
           "commit_hash": null,
           "children": []
         },
@@ -60,7 +60,7 @@
           "description": "Fix backlinks panel: render clickable backlink list items in #backlinks-list from doc.backlinks array",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
+          "cost_usd": 0.09868230000000001,
           "commit_hash": null,
           "children": []
         },
@@ -69,7 +69,7 @@
           "description": "Fix editor toggle/save/cancel: fix CSS selector mismatch (#editor-area → #editor-container), ensure Edit button toggles editor visibility, Save POSTs and reloads, Cancel hides editor",
           "status": "pending",
           "complexity": 2,
-          "cost_usd": 0.0,
+          "cost_usd": 0.09868230000000001,
           "commit_hash": null,
           "children": []
         },
@@ -78,7 +78,7 @@
           "description": "Fix hamburger menu: toggle body.sidebar-open class, create overlay element, close sidebar on overlay click",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
+          "cost_usd": 0.09868230000000001,
           "commit_hash": null,
           "children": []
         }
@@ -97,7 +97,7 @@
           "description": "Ensure tree indentation scales visually per nesting level: verify .tree-children padding-left accumulates correctly and add a left-border visual guide for nested levels",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
+          "cost_usd": 0.5250327499999999,
           "commit_hash": null,
           "children": []
         },
@@ -106,7 +106,7 @@
           "description": "Verify and fix the tag pill active state: ensure .tag-pill.active has a visually distinct background, color, and font-weight compared to the default and hover states",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
+          "cost_usd": 0.14434674999999997,
           "commit_hash": null,
           "children": []
         },
@@ -115,7 +115,7 @@
           "description": "Clean up duplicate/conflicting backlinks selectors (#backlinks-list vs #backlinks vs .backlink-item) and ensure consistent spacing and hover states for backlink items",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
+          "cost_usd": 0.26124424999999996,
           "commit_hash": null,
           "children": []
         },
@@ -124,7 +124,7 @@
           "description": "Ensure #editor-container and #editor-textarea fill the available width of the center column, with proper flex layout so textarea expands vertically",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
+          "cost_usd": 0.14425700000000002,
           "commit_hash": null,
           "children": []
         },
@@ -133,7 +133,7 @@
           "description": "Verify mobile responsive layout: hamburger button visible below 768px, sidebar slides in as fixed overlay with backdrop, center content gets top padding to avoid hamburger overlap",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
+          "cost_usd": 0.174545,
           "commit_hash": null,
           "children": []
         }
@@ -152,7 +152,7 @@
           "description": "Verify and fix /api/search to return {path, title, snippet, tags} for each result, ensuring snippet extraction handles edge cases (no match in body, match at start/end of file)",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
+          "cost_usd": 0.26550475,
           "commit_hash": null,
           "children": []
         },
@@ -161,7 +161,7 @@
           "description": "Verify and fix POST /api/doc to accept {path, content}, write file to disk, rebuild the index, and return {success: true, path}. Ensure path traversal check works on Windows (resolve() + startswith comparison with consistent separators)",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
+          "cost_usd": 0.26545625,
           "commit_hash": null,
           "children": []
         },
@@ -170,7 +170,7 @@
           "description": "Verify and fix GET /api/tags/<tag_name> to return a JSON array of document path strings that have the given tag, compatible with frontend Set() construction for tree filtering",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
+          "cost_usd": 0.1622065,
           "commit_hash": null,
           "children": []
         },
@@ -179,7 +179,7 @@
           "description": "Verify and fix wikilink HTML rendering in render_markdown() to output <a class=\"wiki-link\" data-target=\"target\" href=\"#\">display</a>, ensuring the CSS class and data attribute match what app.js queries (a.wiki-link selector and dataset.target)",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
+          "cost_usd": 0.21462849999999997,
           "commit_hash": null,
           "children": []
         }
