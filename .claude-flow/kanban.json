@@ -1,14 +1,14 @@
 {
   "goal": "给 E:/Work/Cooki/ClaudeCode/knowledge-base 做一个 Web 知识管理系统，仅本地运行，不考虑认证。要求：浏览所有 markdown 文档，支持目录和标签导航，类似维基百科的双向链接跳转，全文搜索，以及简单的文档编辑能力。代码输出到 E:/Work/Cooki/ClaudeCode/knowledge-base/web/ 目录",
   "start_time": "2026-04-04T00:13:13.523290",
-  "updated_at": "2026-04-04T00:55:26.953725",
+  "updated_at": "2026-04-04T00:58:13.384233",
   "summary": {
     "total": 15,
-    "done": 1,
+    "done": 2,
     "failed": 0,
     "running": 0,
-    "pending": 14,
-    "total_cost_usd": 1.5239
+    "pending": 13,
+    "total_cost_usd": 2.6991
   },
   "tree": [
     {
@@ -31,10 +31,10 @@
         {
           "id": "frontend-tree-tags.frontend-tree-render",
           "description": "Implement fetchTree() → renderTree() pipeline: fetch /api/tree, build recursive collapsible folder/file DOM nodes in #tree-container, with expand/collapse on folder click",
-          "status": "pending",
+          "status": "done",
           "complexity": 1,
-          "cost_usd": 0.0,
-          "commit_hash": null,
+          "cost_usd": 0.30816750000000004,
+          "commit_hash": "a1a8e17",
           "children": []
         },
         {
@@ -51,7 +51,7 @@
           "description": "Implement fetchTags() → renderTagCloud() pipeline: fetch /api/tags, render .tag-pill spans in #tag-cloud showing tag name and count",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
+          "cost_usd": 0.0623719,
           "commit_hash": null,
           "children": []
         },
@@ -69,7 +69,7 @@
           "description": "Fix backlinks rendering: backend returns [{path, title}] objects but loadDoc treats them as plain strings — update to use bl.path and bl.title",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
+          "cost_usd": 0.0623719,
           "commit_hash": null,
           "children": []
         },
@@ -78,7 +78,7 @@
           "description": "Fix CSS double-padding: .tree-node has padding-left:14px conflicting with .tree-children padding-left:14px — remove the duplicate so tree indentation is correct",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
+          "cost_usd": 0.30816750000000004,
           "commit_hash": null,
           "children": []
         }
@@ -97,7 +97,7 @@
           "description": "Fix backlinks rendering to handle {path, title} objects from API instead of plain strings",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
+          "cost_usd": 0.0623719,
           "commit_hash": null,
           "children": []
         },
@@ -106,7 +106,7 @@
           "description": "Ensure wiki-link click handler matches the actual HTML attributes emitted by the backend markdown renderer",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
+          "cost_usd": 0.0623719,
           "commit_hash": null,
           "children": []
         },
@@ -115,7 +115,7 @@
           "description": "Verify /api/tags/<tag> endpoint exists in backend; if missing, either add it or refactor toggleTagFilter() to use client-side filtering from cached tree data",
           "status": "pending",
           "complexity": 2,
-          "cost_usd": 0.0,
+          "cost_usd": 0.0623719,
           "commit_hash": null,
           "children": []
         },
@@ -124,7 +124,7 @@
           "description": "Ensure search result click handler uses correct response fields (path, title, snippet) matching the backend /api/search response format",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
+          "cost_usd": 0.24702925000000003,
           "commit_hash": null,
           "children": []
         }
