@@ -1,110 +1,64 @@
 {
-  "goal": "给 E:/Work/Cooki/ClaudeCode/knowledge-base 做一个 Web 知识管理系统，仅本地运行，不考虑认证。要求：浏览所有 markdown 文档，支持目录和标签导航，类似维基百科的双向链接跳转，全文搜索，以及简单的文档编辑能力。代码输出到 E:/Work/Cooki/ClaudeCode/knowledge-base/web/ 目录",
-  "start_time": "2026-04-04T00:13:13.523290",
-  "updated_at": "2026-04-04T02:18:08.325062",
+  "goal": "test",
+  "start_time": "2026-04-04T02:24:53.129564",
+  "updated_at": "2026-04-04T02:25:27.042909",
   "summary": {
-    "total": 11,
-    "done": 1,
+    "total": 6,
+    "done": 0,
     "failed": 0,
     "running": 0,
-    "pending": 10,
-    "total_cost_usd": 1.7352
+    "pending": 6,
+    "total_cost_usd": 0.0
   },
   "tree": [
     {
-      "id": "e2e-fix",
-      "description": "Run the Flask app, test every API endpoint and UI feature end-to-end, and fix all remaining bugs in app.py, app.js, style.css, and index.html in a single pass",
+      "id": "test-install",
+      "description": "Add unit tests for install.py covering project detection, preset selection, and file copying logic",
       "status": "pending",
-      "complexity": 5,
-      "cost_usd": 0.8209970000000001,
-      "commit_hash": "63ebe85",
-      "children": [
-        {
-          "id": "e2e-fix.e2e-1-backend-startup",
-          "description": "Start Flask app, verify GET / serves index.html and all static assets load (CSS, JS) without 404s",
-          "status": "done",
-          "complexity": 1,
-          "cost_usd": 0.457119,
-          "commit_hash": "83f3fba",
-          "children": []
-        },
-        {
-          "id": "e2e-fix.e2e-2-api-tree-doc",
-          "description": "Test /api/tree returns valid JSON tree and /api/doc?path=<valid> returns HTML+backlinks+raw; fix any issues",
-          "status": "pending",
-          "complexity": 1,
-          "cost_usd": 0.0,
-          "commit_hash": null,
-          "children": []
-        },
-        {
-          "id": "e2e-fix.e2e-3-api-save-rebuild",
-          "description": "Test POST /api/doc saves content and rebuilds index; test POST /api/rebuild",
-          "status": "pending",
-          "complexity": 1,
-          "cost_usd": 0.0,
-          "commit_hash": null,
-          "children": []
-        },
-        {
-          "id": "e2e-fix.e2e-4-api-tags-search",
-          "description": "Test /api/tags, /api/tags/<name>, and /api/search?q=test return correct results; fix any issues",
-          "status": "pending",
-          "complexity": 1,
-          "cost_usd": 0.0,
-          "commit_hash": null,
-          "children": []
-        },
-        {
-          "id": "e2e-fix.e2e-5-css-selector-fix",
-          "description": "Fix CSS selector mismatches: #btn-save -> #editor-save, .result-title -> .search-result-title, hardcoded colors -> CSS vars",
-          "status": "pending",
-          "complexity": 1,
-          "cost_usd": 0.457119,
-          "commit_hash": null,
-          "children": []
-        },
-        {
-          "id": "e2e-fix.e2e-6-tree-render-navigate",
-          "description": "Verify tree renders on page load, clicking a file calls loadDoc, active item highlights; fix any JS issues",
-          "status": "pending",
-          "complexity": 1,
-          "cost_usd": 0.0,
-          "commit_hash": null,
-          "children": []
-        },
-        {
-          "id": "e2e-fix.e2e-7-tags-search-ui",
-          "description": "Verify tag cloud renders and filters tree; verify search input triggers debounced fetch and results appear; fix issues",
-          "status": "pending",
-          "complexity": 2,
-          "cost_usd": 0.0,
-          "commit_hash": null,
-          "children": []
-        },
-        {
-          "id": "e2e-fix.e2e-8-editor-wikilinks-backlinks",
-          "description": "Verify editor toggle/save/cancel work; wiki-links navigate correctly; backlinks panel populates on doc load",
-          "status": "pending",
-          "complexity": 2,
-          "cost_usd": 0.0,
-          "commit_hash": null,
-          "children": []
-        },
-        {
-          "id": "e2e-fix.e2e-9-mobile-hamburger",
-          "description": "Verify hamburger menu appears at narrow viewport and toggles sidebar overlay; no JS console errors on any interaction",
-          "status": "pending",
-          "complexity": 1,
-          "cost_usd": 0.0,
-          "commit_hash": null,
-          "children": []
-        }
-      ]
+      "complexity": 1,
+      "cost_usd": 0.0,
+      "commit_hash": null,
+      "children": []
     },
     {
-      "id": "commit-push",
-      "description": "Commit all changes and push to origin",
+      "id": "test-persistent-edge",
+      "description": "Add edge-case tests for persistent-solve.py: cyclic dependencies, budget exhaustion, and retry limits",
+      "status": "pending",
+      "complexity": 1,
+      "cost_usd": 0.0,
+      "commit_hash": null,
+      "children": []
+    },
+    {
+      "id": "test-repo-map-edge",
+      "description": "Add edge-case tests for repo-map.py: empty repos, binary files, and very large symbol tables",
+      "status": "pending",
+      "complexity": 1,
+      "cost_usd": 0.0,
+      "commit_hash": null,
+      "children": []
+    },
+    {
+      "id": "test-dry-run-expand",
+      "description": "Expand dry-run tests to cover all task statuses, JSON output format, and error paths",
+      "status": "pending",
+      "complexity": 1,
+      "cost_usd": 0.0,
+      "commit_hash": null,
+      "children": []
+    },
+    {
+      "id": "test-task-stats-edge",
+      "description": "Add tests for task-stats.py with deeply nested task trees and unicode task descriptions",
+      "status": "pending",
+      "complexity": 1,
+      "cost_usd": 0.0,
+      "commit_hash": null,
+      "children": []
+    },
+    {
+      "id": "test-ci-integration",
+      "description": "Verify all test suites run together without conflicts and produce a combined coverage report",
       "status": "pending",
       "complexity": 1,
       "cost_usd": 0.0,
@@ -112,7 +66,5 @@
       "children": []
     }
   ],
-  "planning_steps": [
-    "depth=0 parent=root"
-  ]
+  "planning_steps": []
 }
