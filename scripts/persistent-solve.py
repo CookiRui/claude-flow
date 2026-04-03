@@ -2198,6 +2198,22 @@ def _run_dag_mode(
             print("  [DAG] No tasks generated. Stopping.")
             break
 
+        # Dry-run: print the plan and exit without executing
+        if dry_run:
+            print(f"\n{'='*60}")
+            print("[DRY RUN] Planning complete. Task tree:")
+            print(f"{'='*60}\n")
+            print(dag.summary())
+            if kanban_state:
+                kanban_state.update_from_dag(dag)
+                kanban_state.save(kanban_out)
+                print(f"\n  [Kanban] Written to {kanban_out}")
+                kanban_state.print_tree()
+            print(f"\n{'='*60}")
+            print("[DRY RUN] Exiting without executing tasks.")
+            print(f"{'='*60}")
+            return
+
         # Phase 2: Execute
         if recursive:
             execute_recursive_dag(dag, goal, budget, kanban_state=kanban_state, kanban_path=kanban_out)
