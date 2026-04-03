@@ -1,14 +1,14 @@
 {
   "goal": "给 E:/Work/Cooki/ClaudeCode/knowledge-base 做一个 Web 知识管理系统，仅本地运行，不考虑认证。要求：浏览所有 markdown 文档，支持目录和标签导航，类似维基百科的双向链接跳转，全文搜索，以及简单的文档编辑能力。代码输出到 E:/Work/Cooki/ClaudeCode/knowledge-base/web/ 目录",
   "start_time": "2026-04-04T00:13:13.523290",
-  "updated_at": "2026-04-04T00:48:50.831082",
+  "updated_at": "2026-04-04T00:55:26.953725",
   "summary": {
-    "total": 5,
+    "total": 15,
     "done": 1,
     "failed": 0,
     "running": 0,
-    "pending": 4,
-    "total_cost_usd": 1.0786
+    "pending": 14,
+    "total_cost_usd": 1.5239
   },
   "tree": [
     {
@@ -25,18 +25,110 @@
       "description": "Implement directory tree rendering (recursive collapsible file browser) and tag cloud rendering with click-to-filter in app.js",
       "status": "pending",
       "complexity": 3,
-      "cost_usd": 0.56401325,
-      "commit_hash": "b1cc8c7",
-      "children": []
+      "cost_usd": 0.78359775,
+      "commit_hash": "39673aa",
+      "children": [
+        {
+          "id": "frontend-tree-tags.frontend-tree-render",
+          "description": "Implement fetchTree() → renderTree() pipeline: fetch /api/tree, build recursive collapsible folder/file DOM nodes in #tree-container, with expand/collapse on folder click",
+          "status": "pending",
+          "complexity": 1,
+          "cost_usd": 0.0,
+          "commit_hash": null,
+          "children": []
+        },
+        {
+          "id": "frontend-tree-tags.frontend-tree-doc-click",
+          "description": "Wire file node clicks to loadDoc(): clicking a .tree-doc calls loadDoc(path), highlights active doc, and auto-expands parent folders to reveal it",
+          "status": "pending",
+          "complexity": 1,
+          "cost_usd": 0.0,
+          "commit_hash": null,
+          "children": []
+        },
+        {
+          "id": "frontend-tree-tags.frontend-tag-cloud-render",
+          "description": "Implement fetchTags() → renderTagCloud() pipeline: fetch /api/tags, render .tag-pill spans in #tag-cloud showing tag name and count",
+          "status": "pending",
+          "complexity": 1,
+          "cost_usd": 0.0,
+          "commit_hash": null,
+          "children": []
+        },
+        {
+          "id": "frontend-tree-tags.frontend-tag-filter",
+          "description": "Implement click-to-filter: clicking a tag pill fetches /api/tags/{tag} for matching doc paths, re-renders the tree showing only matching files; clicking again clears the filter",
+          "status": "pending",
+          "complexity": 2,
+          "cost_usd": 0.0,
+          "commit_hash": null,
+          "children": []
+        },
+        {
+          "id": "frontend-tree-tags.frontend-fix-backlinks-mismatch",
+          "description": "Fix backlinks rendering: backend returns [{path, title}] objects but loadDoc treats them as plain strings — update to use bl.path and bl.title",
+          "status": "pending",
+          "complexity": 1,
+          "cost_usd": 0.0,
+          "commit_hash": null,
+          "children": []
+        },
+        {
+          "id": "frontend-tree-tags.frontend-fix-css-tree-indent",
+          "description": "Fix CSS double-padding: .tree-node has padding-left:14px conflicting with .tree-children padding-left:14px — remove the duplicate so tree indentation is correct",
+          "status": "pending",
+          "complexity": 1,
+          "cost_usd": 0.0,
+          "commit_hash": null,
+          "children": []
+        }
+      ]
     },
     {
       "id": "frontend-doc-view",
       "description": "Implement document display (rendered HTML, metadata, backlinks panel, wiki-link navigation) and search result interaction",
       "status": "pending",
       "complexity": 3,
-      "cost_usd": 0.31387899999999996,
+      "cost_usd": 0.53962075,
       "commit_hash": null,
-      "children": []
+      "children": [
+        {
+          "id": "frontend-doc-view.fix-backlinks-render",
+          "description": "Fix backlinks rendering to handle {path, title} objects from API instead of plain strings",
+          "status": "pending",
+          "complexity": 1,
+          "cost_usd": 0.0,
+          "commit_hash": null,
+          "children": []
+        },
+        {
+          "id": "frontend-doc-view.fix-wikilink-navigation",
+          "description": "Ensure wiki-link click handler matches the actual HTML attributes emitted by the backend markdown renderer",
+          "status": "pending",
+          "complexity": 1,
+          "cost_usd": 0.0,
+          "commit_hash": null,
+          "children": []
+        },
+        {
+          "id": "frontend-doc-view.fix-tag-filter-endpoint",
+          "description": "Verify /api/tags/<tag> endpoint exists in backend; if missing, either add it or refactor toggleTagFilter() to use client-side filtering from cached tree data",
+          "status": "pending",
+          "complexity": 2,
+          "cost_usd": 0.0,
+          "commit_hash": null,
+          "children": []
+        },
+        {
+          "id": "frontend-doc-view.fix-search-result-click",
+          "description": "Ensure search result click handler uses correct response fields (path, title, snippet) matching the backend /api/search response format",
+          "status": "pending",
+          "complexity": 1,
+          "cost_usd": 0.0,
+          "commit_hash": null,
+          "children": []
+        }
+      ]
     },
     {
       "id": "frontend-editor",
