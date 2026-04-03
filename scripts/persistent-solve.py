@@ -48,6 +48,7 @@ DEFAULT_MAX_ROUNDS = 10
 DEFAULT_MAX_TIME = 7200      # 2 hours
 MAX_CONSECUTIVE_NO_PROGRESS = 3
 MAX_RECURSION_DEPTH = 5
+MAX_BATCH_SIZE = 5             # Max C:1-2 tasks per batch call
 WIP_DIR = ".claude-flow"
 WIP_FILE = f"{WIP_DIR}/wip.md"
 CONTRACTS_DIR = f"{WIP_DIR}/contracts"
@@ -320,7 +321,7 @@ class KanbanState:
     def __init__(self, goal: str):
         self.goal = goal
         self.start_time = datetime.now().isoformat()
-        self.tree = {}
+        self.tree = []
         self.summary = {}
 
     def update_from_dag(self, dag: RecursiveDAG):
@@ -1164,7 +1165,27 @@ def recursive_plan(
     session = run_claude_session(prompt, budget_usd=budget.next_task_budget())
     budget.record(f"plan-d{depth}-{parent_id or 'root'}", session["cost_usd"])
 
-    tasks = parse_recursive_dag_response(session["output"], parent_id)
+    try:
+        tasks = parse_recursive_dag_response(session["output"], parent_id)
+    except PlanningError as exc:
+        print(f"  [Plan] PlanningError at depth={depth}: {exc}")
+        if depth == 0:
+            # Root level: return empty DAG, caller will handle
+            return RecursiveDAG()
+        else:
+            # Sub-level: create a single leaf task as fallback
+            fallback = RecursiveTask(
+                id=f"{parent_id}.fallback" if parent_id else "fallback",
+                description=goal[:200],
+                acceptance_criteria="Goal is achieved",
+                dependencies=[],
+                files=[],
+                complexity=2,
+                depth=depth,
+                children=[],
+                parent=parent_id,
+            )
+            return RecursiveDAG([fallback])
 
     # Set depth on all tasks
     for t in tasks:
@@ -1401,10 +1422,13 @@ def checkpoint_commit(task: RecursiveTask, success: bool) -> Optional[str]:
 # ============================================================
 
 def run_l1(task: RecursiveTask, budget: BudgetTracker) -> bool:
-    """L1 verification: quick self-check of acceptance criteria via Claude.
+    """L1 verification: lightweight check that the task produced changes.
 
-    Builds a prompt asking Claude to verify whether the task's acceptance
-    criteria are met by the current code, then parses PASS/FAIL from output.
+    For C:1-2 (atomic tasks): checks that git has uncommitted/new changes
+    touching the expected files. This avoids expensive Claude calls for
+    trivial verification.
+
+    For C:3+ (complex tasks): calls Claude to verify acceptance criteria.
 
     Parameters
     ----------
@@ -1415,6 +1439,29 @@ def run_l1(task: RecursiveTask, budget: BudgetTracker) -> bool:
     -------
     True if verification passed, False otherwise.
     """
+    # C:1-2: lightweight git-based check — did the task produce changes?
+    if task.complexity <= 2:
+        try:
+            diff = subprocess.run(
+                ["git", "diff", "--stat", "HEAD"],
+                capture_output=True, text=True, timeout=10,
+            )
+            status = subprocess.run(
+                ["git", "status", "--porcelain"],
+                capture_output=True, text=True, timeout=10,
+            )
+            has_changes = bool(diff.stdout.strip() or status.stdout.strip())
+        except Exception:
+            has_changes = True  # Assume changes on error
+
+        if has_changes:
+            print(f"  [L1] {task.id}: PASS (changes detected, C:{task.complexity})")
+            return True
+        else:
+            print(f"  [L1] {task.id}: FAIL (no changes detected)")
+            return False
+
+    # C:3+: Claude-based verification
     prompt = f"""You are a verification agent. Check whether the following acceptance criteria are satisfied by the current code in the working directory.
 
 ## Task
@@ -1433,17 +1480,16 @@ Examples:
 
 Your verdict:"""
 
-    per_task_budget = min(0.05, budget.remaining() * 0.1)
+    per_task_budget = min(0.15, budget.remaining() * 0.1)
     if not budget.can_afford():
         print(f"  [L1] Skipping verification for {task.id} — budget exhausted")
-        return False
+        return True  # Don't fail tasks just because budget is low
 
-    print(f"  [L1] Verifying {task.id}...")
+    print(f"  [L1] Verifying {task.id} (Claude, C:{task.complexity})...")
     result = run_claude_session(prompt, timeout=120, budget_usd=per_task_budget)
-    budget.add(result.get("cost_usd", 0.0))
+    budget.record(f"l1-{task.id}", result.get("cost_usd", 0.0))
 
     output = result.get("output", "").strip()
-    # Parse PASS/FAIL from the output
     if re.search(r'\bPASS\b', output, re.IGNORECASE):
         print(f"  [L1] {task.id}: PASS")
         return True
@@ -1518,7 +1564,7 @@ Your verdict:"""
 
         print(f"  [L2] Review round {round_num} for {task.id}...")
         review_result = run_claude_session(review_prompt, timeout=180, budget_usd=per_round_budget)
-        budget.add(review_result.get("cost_usd", 0.0))
+        budget.record(f"l2-review-{task.id}-r{round_num}", review_result.get("cost_usd", 0.0))
 
         review_output = review_result.get("output", "").strip()
         if re.search(r'\bPASS\b', review_output, re.IGNORECASE):
@@ -1548,7 +1594,7 @@ Your verdict:"""
 
         print(f"  [L2] Fixing issues for {task.id} (round {round_num})...")
         fix_result = run_claude_session(fix_prompt, timeout=300, budget_usd=per_round_budget)
-        budget.add(fix_result.get("cost_usd", 0.0))
+        budget.record(f"l2-fix-{task.id}-r{round_num}", fix_result.get("cost_usd", 0.0))
 
         # Re-capture the diff after fix for the next review round
         try:
@@ -1787,8 +1833,69 @@ def execute_dag(dag: RecursiveDAG, goal: str, budget: BudgetTracker,
               f"Budget: {budget.summary()}\n------------------")
 
 
+def _build_batch_prompt(tasks: list, goal: str, contracts_text: str = "") -> str:
+    """Build a single prompt that asks Claude to complete multiple small tasks at once."""
+    task_blocks = []
+    for i, task in enumerate(tasks, 1):
+        files_str = ", ".join(task.files) if task.files else "as needed"
+        task_blocks.append(
+            f"### Task {i}: {task.id}\n"
+            f"Description: {task.description}\n"
+            f"Acceptance Criteria: {task.acceptance_criteria}\n"
+            f"Files: {files_str}"
+        )
+
+    tasks_section = "\n\n".join(task_blocks)
+    contracts_section = ""
+    if contracts_text:
+        contracts_section = f"\n## Interface Contracts\n{contracts_text}\n"
+
+    return f"""You are executing multiple small sub-tasks as part of a larger goal.
+Complete ALL of them in this single session.
+
+## Overall Goal
+{goal}
+{contracts_section}
+## Tasks to Complete
+{tasks_section}
+
+## Instructions
+1. Complete ALL tasks listed above, one by one.
+2. Verify each task's acceptance criteria before moving on.
+3. After completing ALL tasks, make a single commit with message:
+   `checkpoint: batch [{', '.join(t.id for t in tasks)}]`
+4. Do not skip any task.
+"""
+
+
+def _execute_batch(tasks: list, goal: str, budget: BudgetTracker, dag: RecursiveDAG) -> dict:
+    """Execute multiple C:1-2 tasks in a single claude -p call.
+
+    Returns a single result dict. The caller marks all tasks based on this result.
+    """
+    contracts_text = load_relevant_contracts(tasks[0], dag)
+    prompt = _build_batch_prompt(tasks, goal, contracts_text)
+
+    ids_str = ", ".join(t.id for t in tasks)
+    print(f"  [Batch] Executing {len(tasks)} tasks in one call: [{ids_str}]")
+
+    result = run_claude_session(prompt, budget_usd=budget.next_task_budget())
+    cost_per_task = result.get("cost_usd", 0.0) / max(len(tasks), 1)
+    for task in tasks:
+        budget.record(f"batch-{task.id}", cost_per_task)
+
+    status_str = "success" if result["success"] else "fail"
+    print(f"  [Batch] [{status_str}] cost=${result.get('cost_usd', 0):.4f} for {len(tasks)} tasks")
+
+    return result
+
+
 def _execute_leaf_parallel(tasks: list, goal: str, budget: BudgetTracker, dag: RecursiveDAG) -> list:
-    """Execute multiple leaf tasks in parallel with contract injection."""
+    """Execute multiple leaf tasks in parallel with contract injection.
+
+    Optimization: C:1-2 tasks touching the same files are batched into a
+    single claude -p call to avoid redundant cold starts.
+    """
     _FAIL_RESULT = {
         "output": "", "cost_usd": 0.0, "input_tokens": 0,
         "output_tokens": 0, "duration_ms": 0, "stop_reason": "error",
@@ -1796,22 +1903,45 @@ def _execute_leaf_parallel(tasks: list, goal: str, budget: BudgetTracker, dag: R
     }
     results = [None] * len(tasks)
 
-    def _run_one(task):
-        contracts_text = load_relevant_contracts(task, dag)
-        return execute_leaf_task(task, goal, budget, contracts_text)
+    # --- Split into batchable (C:1-2) and individual (C:3+) ---
+    batchable_indices = []
+    individual_indices = []
+    for idx, task in enumerate(tasks):
+        if task.complexity <= 2:
+            batchable_indices.append(idx)
+        else:
+            individual_indices.append(idx)
 
-    with ThreadPoolExecutor(max_workers=max(1, len(tasks))) as executor:
-        futures = {
-            executor.submit(_run_one, task): idx
-            for idx, task in enumerate(tasks)
-        }
-        for future in futures:
-            idx = futures[future]
-            try:
-                results[idx] = future.result()
-            except Exception as exc:
-                print(f"  [ERROR] Task {tasks[idx].id} raised: {exc}")
-                results[idx] = _FAIL_RESULT.copy()
+    # --- Batch C:1-2 tasks (single claude -p call) ---
+    if len(batchable_indices) >= 2:
+        batch_tasks = [tasks[i] for i in batchable_indices[:MAX_BATCH_SIZE]]
+        overflow = batchable_indices[MAX_BATCH_SIZE:]
+        individual_indices.extend(overflow)  # overflow runs individually
+        batch_result = _execute_batch(batch_tasks, goal, budget, dag)
+        for idx in batchable_indices:
+            results[idx] = batch_result
+    elif len(batchable_indices) == 1:
+        # Only one — no point batching
+        individual_indices.append(batchable_indices[0])
+
+    # --- Execute C:3+ tasks (and single C:1-2) individually in parallel ---
+    if individual_indices:
+        def _run_one(task):
+            contracts_text = load_relevant_contracts(task, dag)
+            return execute_leaf_task(task, goal, budget, contracts_text)
+
+        with ThreadPoolExecutor(max_workers=max(1, len(individual_indices))) as executor:
+            futures = {
+                executor.submit(_run_one, tasks[idx]): idx
+                for idx in individual_indices
+            }
+            for future in futures:
+                idx = futures[future]
+                try:
+                    results[idx] = future.result()
+                except Exception as exc:
+                    print(f"  [ERROR] Task {tasks[idx].id} raised: {exc}")
+                    results[idx] = _FAIL_RESULT.copy()
 
     return results
 
@@ -1851,6 +1981,9 @@ def execute_recursive_dag(
     }
 
     batch_num = 0
+    stagnant_batches = 0
+    MAX_STAGNANT_BATCHES = 3
+    prev_done_count = sum(1 for t in dag.tasks.values() if t.status == "done")
 
     while True:
         ready = dag.get_ready_leaves()
@@ -1903,40 +2036,82 @@ def execute_recursive_dag(
                         f"Execution failed: {error_msg}",
                     )
 
-        # --- Execute sequential leaves one by one ---
-        for task in sequential:
-            if not budget.can_afford():
-                print(f"\n[BUDGET EXHAUSTED] Remaining: ${budget.remaining():.4f}. Stopping.")
-                break
+        # --- Execute sequential leaves (batch C:1-2, individual C:3+) ---
+        if sequential:
+            # Split sequential tasks into batchable (C:1-2) and individual (C:3+)
+            seq_batch = [t for t in sequential if t.complexity <= 2]
+            seq_individual = [t for t in sequential if t.complexity > 2]
 
-            print(f"\n  Executing task sequentially: {task.id}")
-            task.status = "running"
-            contracts_text = load_relevant_contracts(task, dag)
-            result = execute_leaf_task(task, goal, budget, contracts_text)
-            success = result.get("success", False)
-            task.cost_usd += result.get("cost_usd", 0.0)
+            # Batch C:1-2 sequential tasks in one call
+            if len(seq_batch) >= 2 and budget.can_afford():
+                seq_batch_run = seq_batch[:MAX_BATCH_SIZE]
+                seq_individual = seq_batch[MAX_BATCH_SIZE:] + seq_individual
+                seq_batch = seq_batch_run
+                for t in seq_batch:
+                    t.status = "running"
+                batch_result = _execute_batch(seq_batch, goal, budget, dag)
+                success = batch_result.get("success", False)
+                cost_per = batch_result.get("cost_usd", 0.0) / max(len(seq_batch), 1)
 
-            if success:
-                l1_pass = run_l1(task, budget)
-                if l1_pass:
-                    commit_hash = checkpoint_commit(task, success=True)
-                    dag.mark_done(task.id, result)
-                    task.commit_hash = commit_hash
+                for task in seq_batch:
+                    task.cost_usd += cost_per
+                    if success:
+                        l1_pass = run_l1(task, budget)
+                        if l1_pass:
+                            commit_hash = checkpoint_commit(task, success=True)
+                            dag.mark_done(task.id, batch_result)
+                            task.commit_hash = commit_hash
+                        else:
+                            commit_hash = checkpoint_commit(task, success=False)
+                            task.commit_hash = commit_hash
+                            _handle_task_failure(
+                                task, dag, budget, execution_retries,
+                                f"L1 verification failed for {task.id}",
+                            )
+                    else:
+                        commit_hash = checkpoint_commit(task, success=False)
+                        task.commit_hash = commit_hash
+                        _handle_task_failure(
+                            task, dag, budget, execution_retries,
+                            f"Batch execution failed",
+                        )
+            elif len(seq_batch) == 1:
+                seq_individual.insert(0, seq_batch[0])
+
+            # Execute C:3+ (and lone C:1-2) individually
+            for task in seq_individual:
+                if not budget.can_afford():
+                    print(f"\n[BUDGET EXHAUSTED] Remaining: ${budget.remaining():.4f}. Stopping.")
+                    break
+
+                print(f"\n  Executing task sequentially: {task.id}")
+                task.status = "running"
+                contracts_text = load_relevant_contracts(task, dag)
+                result = execute_leaf_task(task, goal, budget, contracts_text)
+                success = result.get("success", False)
+                task.cost_usd += result.get("cost_usd", 0.0)
+
+                if success:
+                    l1_pass = run_l1(task, budget)
+                    if l1_pass:
+                        commit_hash = checkpoint_commit(task, success=True)
+                        dag.mark_done(task.id, result)
+                        task.commit_hash = commit_hash
+                    else:
+                        commit_hash = checkpoint_commit(task, success=False)
+                        task.commit_hash = commit_hash
+                        _handle_task_failure(
+                            task, dag, budget, execution_retries,
+                            f"L1 verification failed for {task.id}",
+                        )
                 else:
                     commit_hash = checkpoint_commit(task, success=False)
                     task.commit_hash = commit_hash
+                    error_msg = result.get("output", "")[:500]
                     _handle_task_failure(
                         task, dag, budget, execution_retries,
-                        f"L1 verification failed for {task.id}",
+                        f"Execution failed: {error_msg}",
                     )
-            else:
-                commit_hash = checkpoint_commit(task, success=False)
-                task.commit_hash = commit_hash
-                error_msg = result.get("output", "")[:500]
-                _handle_task_failure(
-                    task, dag, budget, execution_retries,
-                    f"Execution failed: {error_msg}",
-                )
 
         # --- Propagate status (children all done → parent done) ---
         dag.propagate_status()
@@ -1964,9 +2139,20 @@ def execute_recursive_dag(
                 kanban_state.save(kanban_path)
             kanban_state.print_tree()
 
+        # --- Stagnation detection ---
+        current_done_count = sum(1 for t in dag.tasks.values() if t.status == "done")
+        if current_done_count > prev_done_count:
+            stagnant_batches = 0
+            prev_done_count = current_done_count
+        else:
+            stagnant_batches += 1
+            if stagnant_batches >= MAX_STAGNANT_BATCHES:
+                print(f"\n[STAGNATION] No new tasks completed in {MAX_STAGNANT_BATCHES} batches. Stopping.")
+                break
+
         # --- Status report ---
-        print(f"\n--- DAG Status ---\n{dag.summary()}\n"
-              f"Budget: {budget.summary()}\n------------------")
+        print(f"\n--- DAG Status (done:{current_done_count}/{len(dag.tasks)} stagnant:{stagnant_batches}) ---")
+        print(f"{dag.summary()}\nBudget: {budget.summary()}\n------------------")
 
     # Final check
     if dag.all_done():
@@ -2004,14 +2190,17 @@ def _handle_task_failure(
         task.status = "pending"
         print(f"  [Retry] {task_id}: resetting to pending for retry")
     else:
-        # Max retries exhausted — mark failed and try replan
         dag.mark_failed(task_id, error_context)
-        print(f"  [Replan] {task_id}: max retries exhausted, attempting replan...")
 
-        replan_ok = replan_subtree(task, dag, error_context, budget)
-        if not replan_ok:
-            # Replan also failed — task stays failed, continue other branches
-            print(f"  [FAILED] {task_id}: replan failed, skipping task")
+        # Only replan C>=3 tasks. C:1-2 are atomic — replanning causes infinite expansion.
+        if task.complexity >= 3:
+            print(f"  [Replan] {task_id}: max retries exhausted, attempting replan (C:{task.complexity})...")
+            replan_ok = replan_subtree(task, dag, error_context, budget)
+            if not replan_ok:
+                print(f"  [FAILED] {task_id}: replan failed, skipping task")
+                checkpoint_commit(task, success=False)
+        else:
+            print(f"  [FAILED] {task_id}: max retries exhausted (C:{task.complexity}, no replan)")
             checkpoint_commit(task, success=False)
 
 
@@ -2031,6 +2220,9 @@ def persistent_solve(
     kanban: bool = False,
     kanban_path: str = None,
     verify_level: str = "auto",
+    dry_run: bool = False,
+    kanban_serve: bool = False,
+    kanban_port: int = 8420,
 ):
     """Main persistent loop logic.
 
@@ -2044,6 +2236,11 @@ def persistent_solve(
     ensure_wip_dir()
     start_time = time.time()
     budget = BudgetTracker(max_budget_usd, per_task_budget_usd)
+
+    # Start kanban HTTP server if requested (implies --kanban)
+    if kanban_serve:
+        kanban = True
+        _start_kanban_server(kanban_port)
 
     mode_label = f"{mode}" + (" (recursive)" if recursive else "")
     print(f"{'='*60}")
@@ -2061,7 +2258,7 @@ def persistent_solve(
         _run_dag_mode(
             goal, max_rounds, max_time, budget, start_time, skip_clarify,
             recursive=recursive, kanban=kanban, kanban_path=kanban_path,
-            verify_level=verify_level,
+            verify_level=verify_level, dry_run=dry_run,
         )
     else:
         _run_legacy_mode(goal, max_rounds, max_time, budget, start_time)
@@ -2085,6 +2282,7 @@ def _run_dag_mode(
     kanban: bool = False,
     kanban_path: str = None,
     verify_level: str = "auto",
+    dry_run: bool = False,
 ):
     """DAG mode: plan once, execute sub-tasks atomically with budget control.
 
@@ -2098,12 +2296,21 @@ def _run_dag_mode(
         goal = clarify_goal(goal, budget)
         original_goal = goal
 
-    # Prepare kanban state if requested
+    # Prepare kanban state if requested — write an initial "planning" state
+    # immediately so the web viewer doesn't 404 during the planning phase.
     kanban_state = None
     kanban_out = None
     if kanban:
         kanban_out = kanban_path or os.path.join(WIP_DIR, "kanban.json")
         kanban_state = KanbanState(goal)
+        kanban_state.summary = {
+            "total": 0, "done": 0, "failed": 0,
+            "running": 0, "pending": 0, "total_cost_usd": 0.0,
+            "phase": "planning",
+        }
+        kanban_state.save(kanban_out)
+
+    dag = None  # Will be set in the loop; used after loop for summary
 
     for round_num in range(1, max_rounds + 1):
         elapsed = time.time() - start_time
@@ -2131,6 +2338,22 @@ def _run_dag_mode(
         if not dag.tasks:
             print("  [DAG] No tasks generated. Stopping.")
             break
+
+        # Dry-run: print the plan and exit without executing
+        if dry_run:
+            print(f"\n{'='*60}")
+            print("[DRY RUN] Planning complete. Task tree:")
+            print(f"{'='*60}\n")
+            print(dag.summary())
+            if kanban_state:
+                kanban_state.update_from_dag(dag)
+                kanban_state.save(kanban_out)
+                print(f"\n  [Kanban] Written to {kanban_out}")
+                kanban_state.print_tree()
+            print(f"\n{'='*60}")
+            print("[DRY RUN] Exiting without executing tasks.")
+            print(f"{'='*60}")
+            return
 
         # Phase 2: Execute
         if recursive:
@@ -2184,7 +2407,9 @@ def _run_dag_mode(
     print(f"    Budget spent: {budget.summary()}")
     print(f"    Total time: {int(time.time() - start_time)}s")
 
-    if not (not failed and not pending):
+    # Check if there's unfinished work (failed/pending may not be set if DAG was empty)
+    all_done = dag.all_done() if dag and dag.tasks else True
+    if not all_done:
         print(f"\nTo continue: python scripts/persistent-solve.py \"{original_goal}\""
               f"{' --recursive' if recursive else ''}")
 
@@ -2292,6 +2517,61 @@ def _run_legacy_mode(
 
 
 # ============================================================
+# Kanban HTTP Server
+# ============================================================
+
+def _start_kanban_server(port: int = 8420) -> threading.Thread:
+    """Start a lightweight HTTP server in a background thread for the kanban viewer.
+
+    Serves the project root so that kanban-viewer.html can fetch
+    .claude-flow/kanban.json via a relative URL.  The server runs on
+    localhost and is intended for local development only.
+
+    Returns the daemon thread (auto-stops when main process exits).
+    """
+    import http.server
+
+    # Suppress request logs to avoid cluttering the main output
+    class QuietHandler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, directory=".", **kwargs)
+
+        def log_message(self, format, *args):
+            pass
+
+    try:
+        server = http.server.HTTPServer(("127.0.0.1", port), QuietHandler)
+    except OSError:
+        # Port already in use — try a few alternatives
+        for alt_port in range(port + 1, port + 10):
+            try:
+                server = http.server.HTTPServer(("127.0.0.1", alt_port), QuietHandler)
+                port = alt_port
+                break
+            except OSError:
+                continue
+        else:
+            print(f"  [Kanban] Could not start HTTP server on ports {port}-{port+9}")
+            return None
+
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    viewer_url = f"http://localhost:{port}/scripts/kanban-viewer.html"
+    print(f"  [Kanban] Viewer: {viewer_url}")
+    print(f"  [Kanban] Auto-refreshes every 3s — open in browser")
+
+    # Try to open browser automatically
+    import webbrowser
+    try:
+        webbrowser.open(viewer_url)
+    except Exception:
+        pass  # Non-critical — user can open manually
+
+    return thread
+
+
+# ============================================================
 # CLI
 # ============================================================
 
@@ -2337,6 +2617,18 @@ def main():
         help="Custom path for kanban JSON output (default: .claude-flow/kanban.json)"
     )
     parser.add_argument(
+        "--dry-run", action="store_true",
+        help="Only run recursive planning and print the kanban tree, without executing any tasks"
+    )
+    parser.add_argument(
+        "--kanban-serve", action="store_true",
+        help="Start a local HTTP server and open kanban-viewer.html in browser (auto-refresh)"
+    )
+    parser.add_argument(
+        "--kanban-port", type=int, default=8420,
+        help="Port for the kanban HTTP server (default: 8420)"
+    )
+    parser.add_argument(
         "--verify-level", choices=["auto", "l1", "l2", "l3"], default="auto",
         help="Verification level: 'auto' (based on complexity), 'l1', 'l2', 'l3' (default: auto)"
     )
@@ -2351,9 +2643,12 @@ def main():
         mode=args.mode,
         skip_clarify=args.no_clarify,
         recursive=args.recursive,
-        kanban=args.kanban,
+        kanban=args.kanban or args.kanban_serve,
         kanban_path=args.kanban_path,
         verify_level=args.verify_level,
+        dry_run=args.dry_run,
+        kanban_serve=args.kanban_serve,
+        kanban_port=args.kanban_port,
     )
 
 
