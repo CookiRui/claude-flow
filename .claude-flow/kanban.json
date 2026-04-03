@@ -1,0 +1,24 @@
+{
+  "goal": "Complete the kanban web viewer at scripts/kanban-viewer.html. The file already exists with HTML scaffold and JSON loader. Add: 1) Recursive tree renderer for DAG nodes showing id/description/status/cost/commit 2) Status colors: done=green running=blue pending=gray failed=red 3) Summary bar at top (total/done/failed/cost) 4) Auto-refresh every 3s 5) Drag-and-drop kanban.json support 6) Dark theme CSS 7) Collapsible subtrees. Read the existing file first and build on it.",
+  "start_time": "2026-04-03T14:17:13.607052",
+  "updated_at": "2026-04-03T14:17:54.880398",
+  "summary": {
+    "total": 1,
+    "done": 0,
+    "failed": 0,
+    "running": 0,
+    "pending": 1,
+    "total_cost_usd": 0.1253
+  },
+  "tree": [
+    {
+      "id": "task-1-verify-complete",
+      "description": "Verify that the existing kanban-viewer.html already implements all 7 required features and mark them as complete",
+      "status": "pending",
+      "complexity": 1,
+      "cost_usd": 0.1252935,
+      "commit_hash": "f66d84f",
+      "children": []
+    }
+  ]
+}
