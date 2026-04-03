@@ -5,10 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Kanban Viewer</title>
   <style>
-    :root {
+    :root,
+    [data-theme="dark"] {
       --bg-primary: #1a1a2e;
       --bg-secondary: #16213e;
       --bg-card: #0f3460;
+      --bg-card-hover: #1a4a80;
       --text-primary: #e0e0e0;
       --text-secondary: #a0a0b0;
       --border-color: #2a2a4a;
@@ -19,6 +21,25 @@
       --error-bg: #3e1a1a;
       --error-border: #f44336;
       --summary-bg: #16213e;
+      --pending-text: #1a1a2e;
+    }
+
+    [data-theme="light"] {
+      --bg-primary: #f0f2f5;
+      --bg-secondary: #e4e8ec;
+      --bg-card: #ffffff;
+      --bg-card-hover: #eef1f5;
+      --text-primary: #1a1a2e;
+      --text-secondary: #5a5a7a;
+      --border-color: #d0d4da;
+      --status-done: #2e7d32;
+      --status-running: #1565c0;
+      --status-pending: #757575;
+      --status-failed: #c62828;
+      --error-bg: #fdecea;
+      --error-border: #c62828;
+      --summary-bg: #e4e8ec;
+      --pending-text: #ffffff;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -124,7 +145,7 @@
     }
 
     .node-header:hover {
-      background: #1a4a80;
+      background: var(--bg-card-hover);
     }
 
     .chevron {
@@ -163,7 +184,7 @@
 
     .status-done    { background: var(--status-done);    color: #fff; }
     .status-running { background: var(--status-running); color: #fff; }
-    .status-pending { background: var(--status-pending); color: #1a1a2e; }
+    .status-pending { background: var(--status-pending); color: var(--pending-text); }
     .status-failed  { background: var(--status-failed);  color: #fff; }
 
     .node-meta {
@@ -203,6 +224,22 @@
 
     .refresh-dot.active { background: var(--status-done); }
 
+    /* Theme toggle */
+    .theme-toggle {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      border-radius: 6px;
+      padding: 0.3rem 0.7rem;
+      cursor: pointer;
+      font-size: 0.8rem;
+      transition: background 0.15s;
+    }
+
+    .theme-toggle:hover {
+      background: var(--bg-card-hover);
+    }
+
     /* Responsive */
     @media (max-width: 600px) {
       .summary-bar { flex-direction: column; gap: 0.5rem; }
@@ -225,6 +262,7 @@
       <span class="refresh-dot" id="refresh-dot"></span>
       <label><input type="checkbox" id="auto-refresh" checked> Auto-refresh</label>
     </div>
+    <button class="theme-toggle" id="theme-toggle" title="Toggle light/dark theme">Dark</button>
   </div>
 
   <div class="goal-bar" id="goal-bar" style="display:none">
