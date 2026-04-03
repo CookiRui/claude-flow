@@ -2067,6 +2067,7 @@ def execute_recursive_dag(
                         _handle_task_failure(
                             task, dag, budget, execution_retries,
                             f"L1 verification failed for {task.id}",
+                            launch_dir=launch_dir,
                         )
                 else:
                     commit_hash = checkpoint_commit(task, success=False, launch_dir=launch_dir)
@@ -2075,6 +2076,7 @@ def execute_recursive_dag(
                     _handle_task_failure(
                         task, dag, budget, execution_retries,
                         f"Execution failed: {error_msg}",
+                        launch_dir=launch_dir,
                     )
 
         # --- Execute sequential leaves (batch C:1-2, individual C:3+) ---
@@ -2108,6 +2110,7 @@ def execute_recursive_dag(
                             _handle_task_failure(
                                 task, dag, budget, execution_retries,
                                 f"L1 verification failed for {task.id}",
+                                launch_dir=launch_dir,
                             )
                     else:
                         commit_hash = checkpoint_commit(task, success=False, launch_dir=launch_dir)
@@ -2115,6 +2118,7 @@ def execute_recursive_dag(
                         _handle_task_failure(
                             task, dag, budget, execution_retries,
                             f"Batch execution failed",
+                            launch_dir=launch_dir,
                         )
             elif len(seq_batch) == 1:
                 seq_individual.insert(0, seq_batch[0])
@@ -2144,6 +2148,7 @@ def execute_recursive_dag(
                         _handle_task_failure(
                             task, dag, budget, execution_retries,
                             f"L1 verification failed for {task.id}",
+                            launch_dir=launch_dir,
                         )
                 else:
                     commit_hash = checkpoint_commit(task, success=False, launch_dir=launch_dir)
@@ -2152,6 +2157,7 @@ def execute_recursive_dag(
                     _handle_task_failure(
                         task, dag, budget, execution_retries,
                         f"Execution failed: {error_msg}",
+                        launch_dir=launch_dir,
                     )
 
         # --- Propagate status (children all done → parent done) ---
@@ -2335,6 +2341,7 @@ def _run_dag_mode(
     When *recursive* is True, uses recursive_plan + execute_recursive_dag
     instead of the flat plan_dag + execute_dag pipeline.
     """
+    launch_dir = os.getcwd()
     original_goal = goal
 
     # Phase 0: Clarify goal before first round
@@ -2414,7 +2421,7 @@ def _run_dag_mode(
 
         # Phase 2: Execute
         if recursive:
-            execute_recursive_dag(dag, goal, budget, kanban_state=kanban_state, kanban_path=kanban_out)
+            execute_recursive_dag(dag, goal, budget, kanban_state=kanban_state, kanban_path=kanban_out, launch_dir=launch_dir)
         else:
             execute_dag(dag, goal, budget, kanban_state=kanban_state, kanban_path=kanban_out)
 
