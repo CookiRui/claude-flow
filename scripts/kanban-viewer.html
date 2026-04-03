@@ -5,8 +5,474 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Kanban Viewer</title>
   <style>
+    :root {
+      --bg-primary: #1a1a2e;
+      --bg-secondary: #16213e;
+      --bg-card: #0f3460;
+      --text-primary: #e0e0e0;
+      --text-secondary: #a0a0b0;
+      --border-color: #2a2a4a;
+      --status-done: #4caf50;
+      --status-running: #2196f3;
+      --status-pending: #9e9e9e;
+      --status-failed: #f44336;
+      --error-bg: #3e1a1a;
+      --error-border: #f44336;
+      --summary-bg: #16213e;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      padding: 0;
+    }
+
+    /* Summary header bar */
+    .summary-bar {
+      display: flex;
+      gap: 1.5rem;
+      padding: 1rem 1.5rem;
+      background: var(--summary-bg);
+      border-bottom: 1px solid var(--border-color);
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .summary-bar h1 {
+      font-size: 1.2rem;
+      margin-right: auto;
+    }
+
+    .summary-item {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+    }
+
+    .summary-item .value {
+      font-weight: bold;
+      color: var(--text-primary);
+      margin-left: 0.3rem;
+    }
+
+    .goal-bar {
+      padding: 0.6rem 1.5rem;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    .goal-bar strong { color: var(--text-primary); }
+
+    /* Error display */
+    .error-banner {
+      display: none;
+      margin: 1rem 1.5rem;
+      padding: 0.8rem 1rem;
+      background: var(--error-bg);
+      border: 1px solid var(--error-border);
+      border-radius: 6px;
+      color: var(--status-failed);
+      font-size: 0.9rem;
+      white-space: pre-wrap;
+    }
+
+    .error-banner.visible { display: block; }
+
+    /* Drop zone */
+    .drop-zone {
+      margin: 1rem 1.5rem;
+      padding: 2rem;
+      border: 2px dashed var(--border-color);
+      border-radius: 8px;
+      text-align: center;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .drop-zone.dragover {
+      border-color: var(--status-running);
+      background: rgba(33, 150, 243, 0.05);
+    }
+
+    /* Tree container */
+    .tree-container {
+      padding: 1rem 1.5rem;
+    }
+
+    /* Tree node styles */
+    .tree-node {
+      margin: 0.3rem 0;
+    }
+
+    .node-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.7rem;
+      background: var(--bg-card);
+      border-radius: 6px;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.15s;
+      flex-wrap: wrap;
+    }
+
+    .node-header:hover {
+      background: #1a4a80;
+    }
+
+    .chevron {
+      width: 1rem;
+      text-align: center;
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      transition: transform 0.2s;
+      flex-shrink: 0;
+    }
+
+    .chevron.expanded { transform: rotate(90deg); }
+    .chevron.leaf { visibility: hidden; }
+
+    .node-id {
+      font-weight: bold;
+      font-size: 0.85rem;
+      flex-shrink: 0;
+    }
+
+    .node-desc {
+      flex: 1;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      min-width: 100px;
+    }
+
+    .status-badge {
+      font-size: 0.75rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 10px;
+      font-weight: bold;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+
+    .status-done    { background: var(--status-done);    color: #fff; }
+    .status-running { background: var(--status-running); color: #fff; }
+    .status-pending { background: var(--status-pending); color: #fff; }
+    .status-failed  { background: var(--status-failed);  color: #fff; }
+
+    .node-meta {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+    }
+
+    .node-children {
+      margin-left: 1.5rem;
+      border-left: 1px solid var(--border-color);
+      padding-left: 0.5rem;
+    }
+
+    .node-children.collapsed { display: none; }
+
+    /* Auto-refresh indicator */
+    .refresh-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .refresh-controls label {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+
+    .refresh-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--status-pending);
+    }
+
+    .refresh-dot.active { background: var(--status-done); }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      .summary-bar { flex-direction: column; gap: 0.5rem; }
+      .node-header { font-size: 0.8rem; }
+      .node-children { margin-left: 0.8rem; }
+    }
   </style>
 </head>
 <body>
+
+  <div class="summary-bar">
+    <h1>Kanban Viewer</h1>
+    <div class="summary-item">Total: <span class="value" id="total">-</span></div>
+    <div class="summary-item">Done: <span class="value" id="done" style="color:var(--status-done)">-</span></div>
+    <div class="summary-item">Running: <span class="value" id="running" style="color:var(--status-running)">-</span></div>
+    <div class="summary-item">Pending: <span class="value" id="pending" style="color:var(--status-pending)">-</span></div>
+    <div class="summary-item">Failed: <span class="value" id="failed" style="color:var(--status-failed)">-</span></div>
+    <div class="summary-item">Cost: $<span class="value" id="cost">-</span></div>
+    <div class="refresh-controls">
+      <span class="refresh-dot" id="refresh-dot"></span>
+      <label><input type="checkbox" id="auto-refresh" checked> Auto-refresh</label>
+    </div>
+  </div>
+
+  <div class="goal-bar" id="goal-bar" style="display:none">
+    <strong>Goal:</strong> <span id="goal-text"></span>
+  </div>
+
+  <div class="error-banner" id="error-banner"></div>
+
+  <div class="drop-zone" id="drop-zone">
+    Drop a <strong>kanban.json</strong> file here, or it will auto-load from <code>.claude-flow/kanban.json</code>
+  </div>
+
+  <div class="tree-container" id="tree-container"></div>
+
+  <script>
+    // ── State ──
+    let kanbanData = null;
+    let autoRefreshTimer = null;
+    const AUTO_REFRESH_INTERVAL = 3000;
+
+    // ── Error display ──
+    function showError(msg) {
+      const banner = document.getElementById('error-banner');
+      banner.textContent = msg;
+      banner.classList.add('visible');
+    }
+
+    function clearError() {
+      const banner = document.getElementById('error-banner');
+      banner.textContent = '';
+      banner.classList.remove('visible');
+    }
+
+    // ── JSON validation ──
+    function validateKanban(data) {
+      if (typeof data !== 'object' || data === null) {
+        throw new Error('Invalid kanban data: expected a JSON object');
+      }
+      if (!data.summary || typeof data.summary !== 'object') {
+        throw new Error('Invalid kanban data: missing or invalid "summary" field');
+      }
+      if (!Array.isArray(data.tree)) {
+        throw new Error('Invalid kanban data: missing or invalid "tree" field (expected array)');
+      }
+      return data;
+    }
+
+    // ── Load from fetch (auto-refresh path) ──
+    async function loadKanban() {
+      try {
+        const resp = await fetch('.claude-flow/kanban.json', { cache: 'no-store' });
+        if (!resp.ok) {
+          throw new Error('Failed to fetch kanban.json: ' + resp.status + ' ' + resp.statusText);
+        }
+        const text = await resp.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (parseErr) {
+          throw new Error('Malformed JSON in kanban.json: ' + parseErr.message);
+        }
+        validateKanban(data);
+        clearError();
+        kanbanData = data;
+        render(kanbanData);
+      } catch (err) {
+        showError(err.message);
+      }
+    }
+
+    // ── Load from File (drag-and-drop / FileReader path) ──
+    function loadKanbanFromFile(file) {
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        try {
+          let data;
+          try {
+            data = JSON.parse(e.target.result);
+          } catch (parseErr) {
+            throw new Error('Malformed JSON in dropped file: ' + parseErr.message);
+          }
+          validateKanban(data);
+          clearError();
+          kanbanData = data;
+          render(kanbanData);
+        } catch (err) {
+          showError(err.message);
+        }
+      };
+      reader.onerror = function () {
+        showError('Failed to read the dropped file');
+      };
+      reader.readAsText(file);
+    }
+
+    // ── Summary rendering ──
+    function renderSummary(summary) {
+      document.getElementById('total').textContent = summary.total ?? '-';
+      document.getElementById('done').textContent = summary.done ?? '-';
+      document.getElementById('running').textContent = summary.running ?? '-';
+      document.getElementById('pending').textContent = summary.pending ?? '-';
+      document.getElementById('failed').textContent = summary.failed ?? '-';
+      document.getElementById('cost').textContent =
+        typeof summary.total_cost_usd === 'number'
+          ? summary.total_cost_usd.toFixed(4)
+          : '-';
+    }
+
+    // ── Tree rendering ──
+    function createNodeEl(node) {
+      const div = document.createElement('div');
+      div.className = 'tree-node';
+
+      const hasChildren = Array.isArray(node.children) && node.children.length > 0;
+
+      // Header
+      const header = document.createElement('div');
+      header.className = 'node-header';
+
+      const chevron = document.createElement('span');
+      chevron.className = 'chevron' + (hasChildren ? ' expanded' : ' leaf');
+      chevron.textContent = '▶';
+      header.appendChild(chevron);
+
+      const idSpan = document.createElement('span');
+      idSpan.className = 'node-id';
+      idSpan.textContent = node.id || '?';
+      header.appendChild(idSpan);
+
+      const descSpan = document.createElement('span');
+      descSpan.className = 'node-desc';
+      descSpan.textContent = node.description || '';
+      header.appendChild(descSpan);
+
+      const badge = document.createElement('span');
+      const status = (node.status || 'pending').toLowerCase();
+      badge.className = 'status-badge status-' + status;
+      badge.textContent = status;
+      header.appendChild(badge);
+
+      // Meta info: complexity, cost, commit
+      const metaParts = [];
+      if (node.complexity) metaParts.push(node.complexity);
+      if (typeof node.cost_usd === 'number' && node.cost_usd > 0) {
+        metaParts.push('$' + node.cost_usd.toFixed(4));
+      }
+      if (node.commit_hash) metaParts.push(node.commit_hash.substring(0, 7));
+      if (metaParts.length > 0) {
+        const meta = document.createElement('span');
+        meta.className = 'node-meta';
+        meta.textContent = metaParts.join(' · ');
+        header.appendChild(meta);
+      }
+
+      div.appendChild(header);
+
+      // Children
+      if (hasChildren) {
+        const childrenDiv = document.createElement('div');
+        childrenDiv.className = 'node-children';
+        node.children.forEach(function (child) {
+          childrenDiv.appendChild(createNodeEl(child));
+        });
+        div.appendChild(childrenDiv);
+
+        // Collapse/expand
+        header.addEventListener('click', function () {
+          const isCollapsed = childrenDiv.classList.toggle('collapsed');
+          chevron.classList.toggle('expanded', !isCollapsed);
+        });
+      }
+
+      return div;
+    }
+
+    function renderTree(tree) {
+      const container = document.getElementById('tree-container');
+      container.innerHTML = '';
+      tree.forEach(function (node) {
+        container.appendChild(createNodeEl(node));
+      });
+    }
+
+    // ── Main render ──
+    function render(data) {
+      // Goal
+      if (data.goal) {
+        document.getElementById('goal-bar').style.display = '';
+        document.getElementById('goal-text').textContent = data.goal;
+      } else {
+        document.getElementById('goal-bar').style.display = 'none';
+      }
+      renderSummary(data.summary);
+      renderTree(data.tree);
+    }
+
+    // ── Drag and drop ──
+    const dropZone = document.getElementById('drop-zone');
+
+    dropZone.addEventListener('dragover', function (e) {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+
+    dropZone.addEventListener('dragleave', function () {
+      dropZone.classList.remove('dragover');
+    });
+
+    dropZone.addEventListener('drop', function (e) {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file) {
+        // Stop auto-refresh when user drops a file
+        stopAutoRefresh();
+        document.getElementById('auto-refresh').checked = false;
+        loadKanbanFromFile(file);
+      }
+    });
+
+    // ── Auto-refresh ──
+    function startAutoRefresh() {
+      stopAutoRefresh();
+      const dot = document.getElementById('refresh-dot');
+      dot.classList.add('active');
+      loadKanban();
+      autoRefreshTimer = setInterval(loadKanban, AUTO_REFRESH_INTERVAL);
+    }
+
+    function stopAutoRefresh() {
+      const dot = document.getElementById('refresh-dot');
+      dot.classList.remove('active');
+      if (autoRefreshTimer) {
+        clearInterval(autoRefreshTimer);
+        autoRefreshTimer = null;
+      }
+    }
+
+    document.getElementById('auto-refresh').addEventListener('change', function () {
+      if (this.checked) {
+        startAutoRefresh();
+      } else {
+        stopAutoRefresh();
+      }
+    });
+
+    // ── Init ──
+    startAutoRefresh();
+  </script>
 </body>
 </html>
