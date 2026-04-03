@@ -384,6 +384,39 @@
       margin-right: 0.3rem;
     }
 
+    /* Planning steps */
+    .planning-container {
+      padding: 1rem 1.5rem;
+    }
+
+    .planning-title {
+      font-size: 0.95rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.8rem;
+    }
+
+    .planning-step {
+      padding: 0.4rem 0.7rem;
+      margin: 0.25rem 0;
+      background: var(--bg-card);
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-family: monospace;
+      color: var(--text-secondary);
+      border-left: 3px solid var(--border-color);
+    }
+
+    .planning-step.latest {
+      color: var(--text-primary);
+      border-left-color: var(--status-running);
+      animation: pulse-border 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse-border {
+      0%, 100% { border-left-color: var(--status-running); }
+      50% { border-left-color: var(--border-color); }
+    }
+
     /* Responsive */
     @media (max-width: 600px) {
       .summary-bar { flex-direction: column; gap: 0.5rem; }
@@ -654,6 +687,44 @@
       setAllExpanded(false);
     });
 
+    // ── Planning steps rendering ──
+    function renderPlanningSteps(data) {
+      // Remove any existing planning container
+      var existing = document.getElementById('planning-container');
+      if (existing) existing.remove();
+
+      var summary = data.summary || {};
+      var steps = data.planning_steps || [];
+      var tree = data.tree || [];
+
+      // Show planning steps only during planning phase with no tree yet
+      if (summary.phase !== 'planning' || tree.length > 0 || steps.length === 0) {
+        return;
+      }
+
+      var container = document.createElement('div');
+      container.id = 'planning-container';
+      container.className = 'planning-container';
+
+      var title = document.createElement('div');
+      title.className = 'planning-title';
+      title.textContent = 'Recursive planning in progress...';
+      container.appendChild(title);
+
+      steps.forEach(function (step, idx) {
+        var el = document.createElement('div');
+        el.className = 'planning-step';
+        if (idx === steps.length - 1) {
+          el.classList.add('latest');
+        }
+        el.textContent = '[Plan] ' + step;
+        container.appendChild(el);
+      });
+
+      var treeContainer = document.getElementById('tree-container');
+      treeContainer.parentNode.insertBefore(container, treeContainer);
+    }
+
     // ── Main render ──
     function render(data) {
       // Hide drop zone and show tree controls once data loads
@@ -668,6 +739,7 @@
         document.getElementById('goal-bar').style.display = 'none';
       }
       renderSummary(data.summary);
+      renderPlanningSteps(data);
       renderTree(data.tree);
 
       // Re-apply active filter after re-render

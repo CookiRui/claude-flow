@@ -324,6 +324,7 @@ class KanbanState:
         self.start_time = datetime.now().isoformat()
         self.tree = []
         self.summary = {}
+        self.planning_steps = []
 
     def update_from_dag(self, dag: RecursiveDAG):
         """Rebuild tree structure and summary from the current DAG state."""
@@ -342,6 +343,7 @@ class KanbanState:
             "updated_at": datetime.now().isoformat(),
             "summary": self.summary,
             "tree": self.tree,
+            "planning_steps": self.planning_steps,
         }
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
@@ -1166,6 +1168,8 @@ def recursive_plan(
     depth: int = 0,
     parent_id: str = None,
     parent_contract: str = None,
+    kanban_state: "KanbanState | None" = None,
+    kanban_path: str = None,
 ) -> RecursiveDAG:
     """Recursively plan a goal into a DAG of tasks.
 
@@ -1174,7 +1178,11 @@ def recursive_plan(
     - Generates contract files for non-leaf tasks
     - Returns a RecursiveDAG with all tasks flattened across depths
     """
-    print(f"  [Plan] depth={depth} parent={parent_id or 'root'}")
+    step_label = f"depth={depth} parent={parent_id or 'root'}"
+    print(f"  [Plan] {step_label}")
+    if kanban_state is not None and kanban_path:
+        kanban_state.planning_steps.append(step_label)
+        kanban_state.save(kanban_path)
 
     prompt = build_recursive_plan_prompt(goal, depth, parent_contract)
     session = run_claude_session(prompt, budget_usd=budget.next_task_budget())
@@ -1221,6 +1229,8 @@ def recursive_plan(
                 depth=depth + 1,
                 parent_id=task.id,
                 parent_contract=contract.to_markdown(),
+                kanban_state=kanban_state,
+                kanban_path=kanban_path,
             )
 
             # Wire parent/children links
@@ -1380,13 +1390,16 @@ def execute_parallel(tasks: list, goal: str, budget: BudgetTracker) -> list:
     return results
 
 
-def checkpoint_commit(task: RecursiveTask, success: bool) -> Optional[str]:
+def checkpoint_commit(task: RecursiveTask, success: bool, launch_dir: str = None) -> Optional[str]:
     """Create a git checkpoint commit for a completed task.
 
     Parameters
     ----------
-    task:    The task that was just executed.
-    success: Whether the task execution succeeded.
+    task:       The task that was just executed.
+    success:    Whether the task execution succeeded.
+    launch_dir: The directory where autosolve was launched.  All git
+                operations use ``cwd=launch_dir`` to avoid committing into
+                a repo that a claude subprocess happened to cd into.
 
     Returns
     -------
@@ -1399,12 +1412,13 @@ def checkpoint_commit(task: RecursiveTask, success: bool) -> Optional[str]:
         msg = f"[FAILED] checkpoint: {task.id} {task.description}"
 
     # Stage all changes
-    subprocess.run(["git", "add", "-A"], capture_output=True)
+    subprocess.run(["git", "add", "-A"], capture_output=True, cwd=launch_dir)
 
     # Check if there is anything to commit
     status = subprocess.run(
         ["git", "diff", "--cached", "--quiet"],
         capture_output=True,
+        cwd=launch_dir,
     )
     if status.returncode == 0:
         # Nothing staged — no changes to commit
@@ -1416,6 +1430,7 @@ def checkpoint_commit(task: RecursiveTask, success: bool) -> Optional[str]:
         capture_output=True,
         text=True,
         encoding="utf-8",
+        cwd=launch_dir,
     )
     if result.returncode != 0:
         print(f"  [WARN] git commit failed: {result.stderr.strip()}")
@@ -1427,6 +1442,7 @@ def checkpoint_commit(task: RecursiveTask, success: bool) -> Optional[str]:
         capture_output=True,
         text=True,
         encoding="utf-8",
+        cwd=launch_dir,
     )
     commit_hash = rev.stdout.strip() if rev.returncode == 0 else None
     if commit_hash:
@@ -1978,6 +1994,7 @@ def execute_recursive_dag(
     budget: BudgetTracker,
     kanban_state: KanbanState = None,
     kanban_path: str = None,
+    launch_dir: str = None,
 ) -> None:
     """Recursive DAG execution loop with retry tracking, verification dispatch, and failure handling.
 
@@ -1988,6 +2005,8 @@ def execute_recursive_dag(
     budget: Budget tracker for cost accounting and circuit breaking.
     kanban_state: Optional KanbanState instance for tracking progress.
     kanban_path: Optional file path for kanban JSON output.
+    launch_dir: The directory where autosolve was launched, passed to
+                checkpoint_commit to pin git operations.
     """
     execution_retries: dict = {}  # task_id -> retry count
 
@@ -2033,7 +2052,7 @@ def execute_recursive_dag(
                     # L1 verification
                     l1_pass = run_l1(task, budget)
                     if l1_pass:
-                        commit_hash = checkpoint_commit(task, success=True)
+                        commit_hash = checkpoint_commit(task, success=True, launch_dir=launch_dir)
                         dag.mark_done(task.id, result)
                         task.commit_hash = commit_hash
                     else:
@@ -2075,7 +2094,7 @@ def execute_recursive_dag(
                     if success:
                         l1_pass = run_l1(task, budget)
                         if l1_pass:
-                            commit_hash = checkpoint_commit(task, success=True)
+                            commit_hash = checkpoint_commit(task, success=True, launch_dir=launch_dir)
                             dag.mark_done(task.id, batch_result)
                             task.commit_hash = commit_hash
                         else:
@@ -2111,7 +2130,7 @@ def execute_recursive_dag(
                 if success:
                     l1_pass = run_l1(task, budget)
                     if l1_pass:
-                        commit_hash = checkpoint_commit(task, success=True)
+                        commit_hash = checkpoint_commit(task, success=True, launch_dir=launch_dir)
                         dag.mark_done(task.id, result)
                         task.commit_hash = commit_hash
                     else:
@@ -2352,7 +2371,13 @@ def _run_dag_mode(
 
         # Phase 1: Plan
         if recursive:
-            dag = recursive_plan(goal, budget)
+            if kanban_state:
+                kanban_state.planning_steps = []
+            dag = recursive_plan(
+                goal, budget,
+                kanban_state=kanban_state,
+                kanban_path=kanban_out,
+            )
         else:
             dag = plan_dag(goal, budget)
 
