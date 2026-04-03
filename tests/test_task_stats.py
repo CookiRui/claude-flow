@@ -105,7 +105,32 @@ class TestDefaultOutput:
 
 class TestJsonOutput:
     """Verify --json flag produces parseable JSON with expected keys."""
-    pass
+
+    def test_json_output_is_parseable_with_correct_keys(self, tmp_path, capsys):
+        """main() with --json prints valid JSON containing all expected keys with correct values."""
+        kanban = make_kanban(done=5, failed=2, running=1, pending=3, total_cost_usd=4.56)
+        write_kanban(tmp_path, kanban)
+
+        old_argv = sys.argv
+        sys.argv = ["task-stats", "--target", str(tmp_path), "--json"]
+        try:
+            main()
+        finally:
+            sys.argv = old_argv
+
+        out = capsys.readouterr().out
+        data = json.loads(out)  # must be valid JSON
+
+        # All required keys exist
+        for key in ("total", "done", "failed", "pending", "total_cost_usd"):
+            assert key in data, f"Missing key: {key}"
+
+        # Values match the kanban summary
+        assert data["total"] == 11       # 5+2+1+3
+        assert data["done"] == 5
+        assert data["failed"] == 2
+        assert data["pending"] == 3
+        assert data["total_cost_usd"] == 4.56
 
 
 class TestMissingKanban:
