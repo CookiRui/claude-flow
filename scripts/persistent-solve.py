@@ -80,6 +80,7 @@ class RecursiveTask:
     retries: int = 0
     max_retries: int = 2
     complexity: int = 1  # 1-5 complexity rating
+    leaf: bool = True  # if True, do not recurse further
     depth: int = 0  # depth in task tree
     children: list = None  # list of child task IDs
     parent: str = None  # parent task ID or None
@@ -978,11 +979,17 @@ Each task object must have exactly these fields:
   - "complexity": an integer from 1 to 5 rating task complexity:
     1 = trivial (< 1 min), 2 = simple (1-5 min), 3 = moderate (5-15 min),
     4 = complex (15-30 min), 5 = very complex (> 30 min)
+  - "leaf": a boolean indicating whether this task is atomic and should NOT be further decomposed.
+    Set "leaf": true when the task can be completed in a single Claude session (one prompt, one file or a few closely related files).
+    Set "leaf": false ONLY when the task genuinely requires multiple independent sub-components that could be worked on separately.
+    When in doubt, default to true — over-decomposition wastes budget and produces fragmented code.
 
 Rules:
   - Order tasks so that independent tasks (no dependencies) come first.
   - Each task must be small enough to complete in a single focused session.
   - The "complexity" field MUST be an integer in the range [1, 5]. Do NOT omit it.
+  - The "leaf" field MUST be a boolean. Do NOT omit it.
+  - Most tasks should be leaf tasks. Only mark leaf=false for tasks that are clearly multi-component (e.g. "build the entire search system" has indexing + UI + API as distinct parts).
   - Do NOT include any explanation outside the ```json code fence.
 
 Example output:
@@ -994,7 +1001,8 @@ Example output:
     "acceptance_criteria": "Directory structure exists with all required config files",
     "dependencies": [],
     "files": ["pyproject.toml", "src/__init__.py"],
-    "complexity": 2
+    "complexity": 2,
+    "leaf": true
   }},
   {{
     "id": "task-2",
@@ -1002,7 +1010,8 @@ Example output:
     "acceptance_criteria": "All unit tests for core module pass",
     "dependencies": ["task-1"],
     "files": ["src/core.py", "tests/test_core.py"],
-    "complexity": 4
+    "complexity": 4,
+    "leaf": false
   }}
 ]
 ```"""
@@ -1048,6 +1057,11 @@ def parse_recursive_dag_response(response: str, parent_id: str = None) -> list:
             task_id = f"{parent_id}.{task_id}"
             deps = [f"{parent_id}.{d}" for d in deps]
 
+        # Parse leaf flag — default to True (don't recurse) if missing
+        leaf = item.get("leaf", True)
+        if not isinstance(leaf, bool):
+            leaf = True
+
         task = RecursiveTask(
             id=task_id,
             description=str(item.get("description", "")),
@@ -1055,6 +1069,7 @@ def parse_recursive_dag_response(response: str, parent_id: str = None) -> list:
             dependencies=deps,
             files=list(item.get("files", [])),
             complexity=complexity,
+            leaf=leaf,
         )
         tasks.append(task)
 
@@ -1155,7 +1170,7 @@ def recursive_plan(
     """Recursively plan a goal into a DAG of tasks.
 
     - Calls Claude to decompose goal into tasks with complexity ratings
-    - For tasks with complexity >= 3: recurse (unless depth > MAX_RECURSION_DEPTH)
+    - For tasks with leaf=False: recurse (unless depth > MAX_RECURSION_DEPTH)
     - Generates contract files for non-leaf tasks
     - Returns a RecursiveDAG with all tasks flattened across depths
     """
@@ -1194,7 +1209,7 @@ def recursive_plan(
     all_tasks = []
 
     for task in tasks:
-        if task.complexity >= 3 and depth < MAX_RECURSION_DEPTH:
+        if not task.leaf and depth < MAX_RECURSION_DEPTH:
             # Generate contract for this non-leaf task
             contract = _generate_contract(task, budget)
             contract.save()
