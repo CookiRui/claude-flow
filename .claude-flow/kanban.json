@@ -1,157 +1,19 @@
 {
   "goal": "给 E:/Work/Cooki/ClaudeCode/knowledge-base 做一个 Web 知识管理系统，仅本地运行，不考虑认证。要求：浏览所有 markdown 文档，支持目录和标签导航，类似维基百科的双向链接跳转，全文搜索，以及简单的文档编辑能力。代码输出到 E:/Work/Cooki/ClaudeCode/knowledge-base/web/ 目录",
   "start_time": "2026-04-04T00:13:13.523290",
-  "updated_at": "2026-04-04T00:30:46.685349",
+  "updated_at": "2026-04-04T00:33:59.181645",
   "summary": {
-    "total": 20,
-    "done": 3,
-    "failed": 3,
+    "total": 4,
+    "done": 0,
+    "failed": 0,
     "running": 0,
-    "pending": 14,
-    "total_cost_usd": 4.6547
+    "pending": 4,
+    "total_cost_usd": 0.0
   },
   "tree": [
     {
-      "id": "frontend-shell",
-      "description": "Build the HTML shell, CSS layout, and JS routing/navigation framework for the SPA",
-      "status": "pending",
-      "complexity": 4,
-      "cost_usd": 0.0,
-      "commit_hash": null,
-      "children": [
-        {
-          "id": "frontend-shell.html-shell",
-          "description": "Create index.html with SPA shell structure including sidebar container, content area, hamburger toggle, and script/style includes from /static/ prefix",
-          "status": "done",
-          "complexity": 2,
-          "cost_usd": 0.340928,
-          "commit_hash": "ca8ae38",
-          "children": []
-        },
-        {
-          "id": "frontend-shell.css-layout",
-          "description": "Build responsive CSS layout with sidebar + main content columns, hamburger menu collapse below 768px, base typography, and tree/nav styling",
-          "status": "pending",
-          "complexity": 3,
-          "cost_usd": 0.4085375,
-          "commit_hash": "48084ef",
-          "children": [
-            {
-              "id": "frontend-shell.css-layout.css-layout.base-structure",
-              "description": "Create static/css/style.css with CSS reset, base typography (font-family, font-size, line-height, color), and html/body full-height setup",
-              "status": "done",
-              "complexity": 1,
-              "cost_usd": 0.9391384999999999,
-              "commit_hash": "8d01449",
-              "children": []
-            },
-            {
-              "id": "frontend-shell.css-layout.css-layout.sidebar-content",
-              "description": "Add flexbox layout with #sidebar (fixed 260px width) and #content (flex:1) columns, overflow scrolling on both panels",
-              "status": "done",
-              "complexity": 1,
-              "cost_usd": 0.3113185,
-              "commit_hash": "6806b6f",
-              "children": []
-            },
-            {
-              "id": "frontend-shell.css-layout.css-layout.responsive-hamburger",
-              "description": "Add @media (max-width: 768px) query that hides #sidebar by default, shows .hamburger toggle button, and adds .sidebar-open class to reveal sidebar as overlay",
-              "status": "pending",
-              "complexity": 2,
-              "cost_usd": 0.0,
-              "commit_hash": null,
-              "children": []
-            },
-            {
-              "id": "frontend-shell.css-layout.css-layout.component-styles",
-              "description": "Add styles for .tree-node (indent, hover, cursor), .nav-link (sidebar navigation items), and .error-state (centered message with icon placeholder)",
-              "status": "pending",
-              "complexity": 1,
-              "cost_usd": 0.091224125,
-              "commit_hash": null,
-              "children": []
-            }
-          ]
-        },
-        {
-          "id": "frontend-shell.js-router-and-nav",
-          "description": "Implement hash router with #tree, #tags, #search, #doc/:path routes, deep-linking support, navigateTo() API, fetchTree() sidebar loader, and graceful API error handling",
-          "status": "pending",
-          "complexity": 4,
-          "cost_usd": 0.6610057500000001,
-          "commit_hash": "13db68e",
-          "children": [
-            {
-              "id": "frontend-shell.js-router-and-nav.frontend-shell.css-base",
-              "description": "Create static/css/style.css with base layout: sidebar + main content two-column grid, base typography, and #sidebar/#content container styles",
-              "status": "failed",
-              "complexity": 1,
-              "cost_usd": 0.25238737499999997,
-              "commit_hash": null,
-              "children": []
-            },
-            {
-              "id": "frontend-shell.js-router-and-nav.frontend-shell.css-responsive",
-              "description": "Add responsive styles: hamburger menu button, sidebar collapse below 768px breakpoint, and .tree-node/.nav-link styling",
-              "status": "pending",
-              "complexity": 1,
-              "cost_usd": 0.0,
-              "commit_hash": null,
-              "children": []
-            },
-            {
-              "id": "frontend-shell.js-router-and-nav.frontend-shell.html-shell",
-              "description": "Create static/index.html with SPA shell: #sidebar container, #content area, hamburger toggle button, and script/style includes from /static/ prefix",
-              "status": "failed",
-              "complexity": 1,
-              "cost_usd": 1.0758999999999999,
-              "commit_hash": null,
-              "children": []
-            },
-            {
-              "id": "frontend-shell.js-router-and-nav.frontend-shell.js-router-core",
-              "description": "Create static/js/app.js with minimal hash router: listen to hashchange, parse hash into {view, param} object, dispatch to placeholder render functions for tree/tags/search/doc views",
-              "status": "pending",
-              "complexity": 1,
-              "cost_usd": 0.0,
-              "commit_hash": null,
-              "children": []
-            },
-            {
-              "id": "frontend-shell.js-router-and-nav.frontend-shell.js-sidebar-tree",
-              "description": "Implement fetchTree() that calls GET /api/tree, renders nested directory tree in #sidebar with clickable links that navigate to #doc/:path",
-              "status": "pending",
-              "complexity": 2,
-              "cost_usd": 0.0,
-              "commit_hash": null,
-              "children": []
-            },
-            {
-              "id": "frontend-shell.js-router-and-nav.frontend-shell.js-error-handling",
-              "description": "Add graceful API error states: if fetchTree() or doc fetch fails, show user-friendly error message in #sidebar and #content respectively instead of blank page",
-              "status": "pending",
-              "complexity": 1,
-              "cost_usd": 0.0,
-              "commit_hash": null,
-              "children": []
-            },
-            {
-              "id": "frontend-shell.js-router-and-nav.frontend-shell.js-hamburger",
-              "description": "Wire hamburger button click to toggle sidebar visibility class for mobile responsive behavior",
-              "status": "pending",
-              "complexity": 1,
-              "cost_usd": 0.0,
-              "commit_hash": null,
-              "children": []
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "id": "frontend-doc-view",
-      "description": "Implement document viewer with rendered HTML, metadata panel, tag chips, and bidirectional link sections (backlinks + outgoing links)",
+      "id": "backend-api",
+      "description": "Build Flask backend with all API endpoints: /api/tree, /api/doc, /api/tags, /api/search, /api/doc (POST save), plus static file serving and markdown indexing",
       "status": "pending",
       "complexity": 4,
       "cost_usd": 0.0,
@@ -159,44 +21,34 @@
       "children": []
     },
     {
-      "id": "frontend-tags-search",
-      "description": "Build tag navigation page (all tags with counts, click to filter docs) and full-text search with live results showing snippets",
+      "id": "frontend-app",
+      "description": "Implement all frontend JS logic: directory tree rendering with expand/collapse, document viewing with wikilink parsing, tag cloud navigation, debounced full-text search, backlinks panel, and markdown edit/save mode",
       "status": "pending",
-      "complexity": 3,
+      "complexity": 5,
       "cost_usd": 0.0,
       "commit_hash": null,
       "children": []
     },
     {
-      "id": "frontend-editor",
-      "description": "Add document editing capability with a raw markdown textarea, live preview toggle, and save via PUT /api/doc",
+      "id": "html-polish",
+      "description": "Update index.html to include marked.js CDN for client-side markdown rendering, add editor textarea and save/edit buttons, and fix any structural mismatches with the JS app",
       "status": "pending",
-      "complexity": 3,
-      "cost_usd": 0.0,
-      "commit_hash": null,
-      "children": []
-    },
-    {
-      "id": "backend-static-serve",
-      "description": "Add Flask route to serve the static frontend files and configure app to serve index.html as the SPA entry point",
-      "status": "failed",
       "complexity": 2,
-      "cost_usd": 0.5742802499999999,
+      "cost_usd": 0.0,
       "commit_hash": null,
       "children": []
     },
     {
       "id": "integration-test",
-      "description": "End-to-end smoke test: start the server, verify all API endpoints return valid data and the frontend loads and navigates correctly",
+      "description": "Start the server, manually verify all features work end-to-end: tree navigation, doc viewing, wikilinks, tags, search, editing, backlinks",
       "status": "pending",
-      "complexity": 2,
+      "complexity": 3,
       "cost_usd": 0.0,
       "commit_hash": null,
       "children": []
     }
   ],
   "planning_steps": [
-    "depth=0 parent=root",
-    "depth=1 parent=frontend-shell"
+    "depth=0 parent=root"
   ]
 }
