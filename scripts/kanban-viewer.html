@@ -478,7 +478,7 @@
     // ── Load from fetch (auto-refresh path) ──
     async function loadKanban() {
       try {
-        const resp = await fetch('.claude-flow/kanban.json', { cache: 'no-store' });
+        const resp = await fetch('/.claude-flow/kanban.json', { cache: 'no-store' });
         if (!resp.ok) {
           throw new Error('Failed to fetch kanban.json: ' + resp.status + ' ' + resp.statusText);
         }

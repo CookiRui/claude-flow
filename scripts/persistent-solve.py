@@ -320,7 +320,7 @@ class KanbanState:
     def __init__(self, goal: str):
         self.goal = goal
         self.start_time = datetime.now().isoformat()
-        self.tree = {}
+        self.tree = []
         self.summary = {}
 
     def update_from_dag(self, dag: RecursiveDAG):
