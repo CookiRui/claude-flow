@@ -1,14 +1,14 @@
 {
   "goal": "Complete the kanban web viewer at scripts/kanban-viewer.html. The file already exists with HTML scaffold and JSON loader. Add: 1) Recursive tree renderer for DAG nodes showing id/description/status/cost/commit 2) Status colors: done=green running=blue pending=gray failed=red 3) Summary bar at top (total/done/failed/cost) 4) Auto-refresh every 3s 5) Drag-and-drop kanban.json support 6) Dark theme CSS 7) Collapsible subtrees. Read the existing file first and build on it.",
   "start_time": "2026-04-03T14:17:13.607052",
-  "updated_at": "2026-04-03T14:18:49.180037",
+  "updated_at": "2026-04-03T14:29:30.107411",
   "summary": {
     "total": 8,
     "done": 0,
     "failed": 0,
     "running": 0,
     "pending": 8,
-    "total_cost_usd": 0.3171
+    "total_cost_usd": 1.5594
   },
   "tree": [
     {
@@ -24,8 +24,8 @@
           "description": "Verify recursive tree rendering exists in kanban-viewer.html",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
-          "commit_hash": null,
+          "cost_usd": 0.09116699999999998,
+          "commit_hash": "74e0f84",
           "children": []
         },
         {
@@ -33,7 +33,7 @@
           "description": "Verify status color badges exist in kanban-viewer.html",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
+          "cost_usd": 0.21689899999999998,
           "commit_hash": null,
           "children": []
         },
@@ -42,7 +42,7 @@
           "description": "Verify summary bar exists in kanban-viewer.html",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
+          "cost_usd": 0.19528874999999998,
           "commit_hash": null,
           "children": []
         },
@@ -51,7 +51,7 @@
           "description": "Verify auto-refresh exists in kanban-viewer.html",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
+          "cost_usd": 0.2216875,
           "commit_hash": null,
           "children": []
         },
@@ -60,7 +60,7 @@
           "description": "Verify drag-drop file loading exists in kanban-viewer.html",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
+          "cost_usd": 0.19924,
           "commit_hash": null,
           "children": []
         },
@@ -69,7 +69,7 @@
           "description": "Verify dark theme exists in kanban-viewer.html",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
+          "cost_usd": 0.20360050000000002,
           "commit_hash": null,
           "children": []
         },
@@ -78,7 +78,7 @@
           "description": "Verify collapsible subtrees exist in kanban-viewer.html",
           "status": "pending",
           "complexity": 1,
-          "cost_usd": 0.0,
+          "cost_usd": 0.11438799999999999,
           "commit_hash": null,
           "children": []
         }
