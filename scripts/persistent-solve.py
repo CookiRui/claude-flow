@@ -988,11 +988,16 @@ Each task object must have exactly these fields:
 
 Rules:
   - Order tasks so that independent tasks (no dependencies) come first.
-  - Each task must be small enough to complete in a single focused session.
   - The "complexity" field MUST be an integer in the range [1, 5]. Do NOT omit it.
   - The "leaf" field MUST be a boolean. Do NOT omit it.
-  - Most tasks should be leaf tasks. Only mark leaf=false for tasks that are clearly multi-component (e.g. "build the entire search system" has indexing + UI + API as distinct parts).
   - Do NOT include any explanation outside the ```json code fence.
+
+Granularity — the RIGHT size for a task:
+  - One task = one agent invocation. A task should be completable in a single Claude session.
+  - A task typically touches 1-3 files with a clear, singular objective (fix one bug, add one feature, create one module).
+  - Tasks should be parallelizable where possible — prefer independent tasks over deep dependency chains.
+  - Do NOT decompose by code structure (e.g. "parse tags" → "parse block list" → "implement list item"). Instead decompose by deliverable (e.g. "build the markdown parser with frontmatter support").
+  - Most tasks should be leaf=true. Only set leaf=false for tasks that bundle genuinely independent sub-deliverables (e.g. "build the web frontend" has HTML structure + CSS styling + JS logic as separable work).
 
 Example output:
 ```json
@@ -2057,14 +2062,14 @@ def execute_recursive_dag(
                         task.commit_hash = commit_hash
                     else:
                         # L1 failed — treat as task failure
-                        commit_hash = checkpoint_commit(task, success=False)
+                        commit_hash = checkpoint_commit(task, success=False, launch_dir=launch_dir)
                         task.commit_hash = commit_hash
                         _handle_task_failure(
                             task, dag, budget, execution_retries,
                             f"L1 verification failed for {task.id}",
                         )
                 else:
-                    commit_hash = checkpoint_commit(task, success=False)
+                    commit_hash = checkpoint_commit(task, success=False, launch_dir=launch_dir)
                     task.commit_hash = commit_hash
                     error_msg = result.get("output", "")[:500]
                     _handle_task_failure(
@@ -2098,14 +2103,14 @@ def execute_recursive_dag(
                             dag.mark_done(task.id, batch_result)
                             task.commit_hash = commit_hash
                         else:
-                            commit_hash = checkpoint_commit(task, success=False)
+                            commit_hash = checkpoint_commit(task, success=False, launch_dir=launch_dir)
                             task.commit_hash = commit_hash
                             _handle_task_failure(
                                 task, dag, budget, execution_retries,
                                 f"L1 verification failed for {task.id}",
                             )
                     else:
-                        commit_hash = checkpoint_commit(task, success=False)
+                        commit_hash = checkpoint_commit(task, success=False, launch_dir=launch_dir)
                         task.commit_hash = commit_hash
                         _handle_task_failure(
                             task, dag, budget, execution_retries,
@@ -2134,14 +2139,14 @@ def execute_recursive_dag(
                         dag.mark_done(task.id, result)
                         task.commit_hash = commit_hash
                     else:
-                        commit_hash = checkpoint_commit(task, success=False)
+                        commit_hash = checkpoint_commit(task, success=False, launch_dir=launch_dir)
                         task.commit_hash = commit_hash
                         _handle_task_failure(
                             task, dag, budget, execution_retries,
                             f"L1 verification failed for {task.id}",
                         )
                 else:
-                    commit_hash = checkpoint_commit(task, success=False)
+                    commit_hash = checkpoint_commit(task, success=False, launch_dir=launch_dir)
                     task.commit_hash = commit_hash
                     error_msg = result.get("output", "")[:500]
                     _handle_task_failure(
@@ -2208,6 +2213,7 @@ def _handle_task_failure(
     budget: BudgetTracker,
     execution_retries: dict,
     error_context: str,
+    launch_dir: str = None,
 ) -> None:
     """Handle a task failure: retry or replan.
 
@@ -2234,10 +2240,10 @@ def _handle_task_failure(
             replan_ok = replan_subtree(task, dag, error_context, budget)
             if not replan_ok:
                 print(f"  [FAILED] {task_id}: replan failed, skipping task")
-                checkpoint_commit(task, success=False)
+                checkpoint_commit(task, success=False, launch_dir=launch_dir)
         else:
             print(f"  [FAILED] {task_id}: max retries exhausted (C:{task.complexity}, no replan)")
-            checkpoint_commit(task, success=False)
+            checkpoint_commit(task, success=False, launch_dir=launch_dir)
 
 
 # ============================================================
