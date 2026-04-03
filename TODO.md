@@ -22,12 +22,12 @@
 
 ## autosolve / 看板优化
 
-- [ ] 规划阶段进度展示 — planning 阶段看板空白，应显示递归分解实时进度（depth/parent）
+- [x] 规划阶段进度展示 — planning 阶段看板空白，应显示递归分解实时进度（depth/parent）
 - [ ] phase 状态可视化 — kanban.json 有 phase 字段但 viewer 没展示（planning/clarify/executing）
 - [ ] clarify 过程可见 — 目标澄清的问答内容展示在看板上
 - [x] 递归拆分智能终止 — 用 leaf 标记替代纯 complexity 判断，Claude 自主决定是否继续拆分
 - [ ] 规划阶段 JSON 解析健壮性 — Claude 输出偶尔截断或缺 code fence，需要更好的 fallback/重试
-- [ ] checkpoint commit 目录隔离 — 子进程可能 cd 到目标目录导致 git commit 污染其他仓库
+- [x] checkpoint commit 目录隔离 — 子进程可能 cd 到目标目录导致 git commit 污染其他仓库
 - [x] subprocess encoding=utf-8 — Windows GBK 编码导致中文 commit message 解码失败
 - [x] 规划完成后立即写入 kanban — 之前只有 dry-run 模式才在规划后写入
 
