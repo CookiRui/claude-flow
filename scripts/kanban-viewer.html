@@ -432,19 +432,21 @@
       badge.textContent = status;
       header.appendChild(badge);
 
-      // Meta info: complexity, cost, commit
-      const metaParts = [];
-      if (node.complexity) metaParts.push(node.complexity);
-      if (typeof node.cost_usd === 'number' && node.cost_usd > 0) {
-        metaParts.push('$' + node.cost_usd.toFixed(4));
-      }
-      if (node.commit_hash) metaParts.push(node.commit_hash.substring(0, 7));
-      if (metaParts.length > 0) {
-        const meta = document.createElement('span');
-        meta.className = 'node-meta';
-        meta.textContent = metaParts.join(' · ');
-        header.appendChild(meta);
-      }
+      // Cost field (always visible)
+      const costSpan = document.createElement('span');
+      costSpan.className = 'node-meta';
+      costSpan.textContent = typeof node.cost_usd === 'number'
+        ? '$' + node.cost_usd.toFixed(4)
+        : '$-';
+      header.appendChild(costSpan);
+
+      // Commit field (always visible)
+      const commitSpan = document.createElement('span');
+      commitSpan.className = 'node-meta';
+      commitSpan.textContent = node.commit_hash
+        ? node.commit_hash.substring(0, 7)
+        : 'no-commit';
+      header.appendChild(commitSpan);
 
       div.appendChild(header);
 
