@@ -1415,6 +1415,7 @@ def checkpoint_commit(task: RecursiveTask, success: bool) -> Optional[str]:
         ["git", "commit", "-m", msg],
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     if result.returncode != 0:
         print(f"  [WARN] git commit failed: {result.stderr.strip()}")
@@ -1425,6 +1426,7 @@ def checkpoint_commit(task: RecursiveTask, success: bool) -> Optional[str]:
         ["git", "rev-parse", "--short", "HEAD"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     commit_hash = rev.stdout.strip() if rev.returncode == 0 else None
     if commit_hash:
@@ -1459,11 +1461,11 @@ def run_l1(task: RecursiveTask, budget: BudgetTracker) -> bool:
         try:
             diff = subprocess.run(
                 ["git", "diff", "--stat", "HEAD"],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True, text=True, encoding="utf-8", timeout=10,
             )
             status = subprocess.run(
                 ["git", "status", "--porcelain"],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True, text=True, encoding="utf-8", timeout=10,
             )
             has_changes = bool(diff.stdout.strip() or status.stdout.strip())
         except Exception:
@@ -1539,7 +1541,7 @@ def run_l2(task: RecursiveTask, budget: BudgetTracker) -> bool:
     try:
         diff_proc = subprocess.run(
             ["git", "diff", "HEAD~1"],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True, text=True, encoding="utf-8", timeout=30,
         )
         diff_text = diff_proc.stdout.strip()
     except Exception as exc:
@@ -1615,7 +1617,7 @@ Your verdict:"""
         try:
             diff_proc = subprocess.run(
                 ["git", "diff", "HEAD"],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True, text=True, encoding="utf-8", timeout=30,
             )
             new_diff = diff_proc.stdout.strip()
             if new_diff:
@@ -1650,7 +1652,7 @@ def run_l3(task: RecursiveTask, budget: BudgetTracker) -> bool:
     try:
         result = subprocess.run(
             ["python", "-m", "pytest"],
-            capture_output=True, text=True, timeout=600,
+            capture_output=True, text=True, encoding="utf-8", timeout=600,
         )
         if result.returncode == 0:
             print(f"  [L3] {task.id}: PASS — all tests passed")
