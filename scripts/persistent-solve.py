@@ -1832,8 +1832,69 @@ def execute_dag(dag: RecursiveDAG, goal: str, budget: BudgetTracker,
               f"Budget: {budget.summary()}\n------------------")
 
 
+def _build_batch_prompt(tasks: list, goal: str, contracts_text: str = "") -> str:
+    """Build a single prompt that asks Claude to complete multiple small tasks at once."""
+    task_blocks = []
+    for i, task in enumerate(tasks, 1):
+        files_str = ", ".join(task.files) if task.files else "as needed"
+        task_blocks.append(
+            f"### Task {i}: {task.id}\n"
+            f"Description: {task.description}\n"
+            f"Acceptance Criteria: {task.acceptance_criteria}\n"
+            f"Files: {files_str}"
+        )
+
+    tasks_section = "\n\n".join(task_blocks)
+    contracts_section = ""
+    if contracts_text:
+        contracts_section = f"\n## Interface Contracts\n{contracts_text}\n"
+
+    return f"""You are executing multiple small sub-tasks as part of a larger goal.
+Complete ALL of them in this single session.
+
+## Overall Goal
+{goal}
+{contracts_section}
+## Tasks to Complete
+{tasks_section}
+
+## Instructions
+1. Complete ALL tasks listed above, one by one.
+2. Verify each task's acceptance criteria before moving on.
+3. After completing ALL tasks, make a single commit with message:
+   `checkpoint: batch [{', '.join(t.id for t in tasks)}]`
+4. Do not skip any task.
+"""
+
+
+def _execute_batch(tasks: list, goal: str, budget: BudgetTracker, dag: RecursiveDAG) -> dict:
+    """Execute multiple C:1-2 tasks in a single claude -p call.
+
+    Returns a single result dict. The caller marks all tasks based on this result.
+    """
+    contracts_text = load_relevant_contracts(tasks[0], dag)
+    prompt = _build_batch_prompt(tasks, goal, contracts_text)
+
+    ids_str = ", ".join(t.id for t in tasks)
+    print(f"  [Batch] Executing {len(tasks)} tasks in one call: [{ids_str}]")
+
+    result = run_claude_session(prompt, budget_usd=budget.next_task_budget())
+    cost_per_task = result.get("cost_usd", 0.0) / max(len(tasks), 1)
+    for task in tasks:
+        budget.record(f"batch-{task.id}", cost_per_task)
+
+    status_str = "success" if result["success"] else "fail"
+    print(f"  [Batch] [{status_str}] cost=${result.get('cost_usd', 0):.4f} for {len(tasks)} tasks")
+
+    return result
+
+
 def _execute_leaf_parallel(tasks: list, goal: str, budget: BudgetTracker, dag: RecursiveDAG) -> list:
-    """Execute multiple leaf tasks in parallel with contract injection."""
+    """Execute multiple leaf tasks in parallel with contract injection.
+
+    Optimization: C:1-2 tasks touching the same files are batched into a
+    single claude -p call to avoid redundant cold starts.
+    """
     _FAIL_RESULT = {
         "output": "", "cost_usd": 0.0, "input_tokens": 0,
         "output_tokens": 0, "duration_ms": 0, "stop_reason": "error",
@@ -1841,22 +1902,43 @@ def _execute_leaf_parallel(tasks: list, goal: str, budget: BudgetTracker, dag: R
     }
     results = [None] * len(tasks)
 
-    def _run_one(task):
-        contracts_text = load_relevant_contracts(task, dag)
-        return execute_leaf_task(task, goal, budget, contracts_text)
+    # --- Split into batchable (C:1-2) and individual (C:3+) ---
+    batchable_indices = []
+    individual_indices = []
+    for idx, task in enumerate(tasks):
+        if task.complexity <= 2:
+            batchable_indices.append(idx)
+        else:
+            individual_indices.append(idx)
 
-    with ThreadPoolExecutor(max_workers=max(1, len(tasks))) as executor:
-        futures = {
-            executor.submit(_run_one, task): idx
-            for idx, task in enumerate(tasks)
-        }
-        for future in futures:
-            idx = futures[future]
-            try:
-                results[idx] = future.result()
-            except Exception as exc:
-                print(f"  [ERROR] Task {tasks[idx].id} raised: {exc}")
-                results[idx] = _FAIL_RESULT.copy()
+    # --- Batch C:1-2 tasks (single claude -p call) ---
+    if len(batchable_indices) >= 2:
+        batch_tasks = [tasks[i] for i in batchable_indices]
+        batch_result = _execute_batch(batch_tasks, goal, budget, dag)
+        for idx in batchable_indices:
+            results[idx] = batch_result
+    elif len(batchable_indices) == 1:
+        # Only one — no point batching
+        individual_indices.append(batchable_indices[0])
+
+    # --- Execute C:3+ tasks (and single C:1-2) individually in parallel ---
+    if individual_indices:
+        def _run_one(task):
+            contracts_text = load_relevant_contracts(task, dag)
+            return execute_leaf_task(task, goal, budget, contracts_text)
+
+        with ThreadPoolExecutor(max_workers=max(1, len(individual_indices))) as executor:
+            futures = {
+                executor.submit(_run_one, tasks[idx]): idx
+                for idx in individual_indices
+            }
+            for future in futures:
+                idx = futures[future]
+                try:
+                    results[idx] = future.result()
+                except Exception as exc:
+                    print(f"  [ERROR] Task {tasks[idx].id} raised: {exc}")
+                    results[idx] = _FAIL_RESULT.copy()
 
     return results
 
@@ -1951,40 +2033,79 @@ def execute_recursive_dag(
                         f"Execution failed: {error_msg}",
                     )
 
-        # --- Execute sequential leaves one by one ---
-        for task in sequential:
-            if not budget.can_afford():
-                print(f"\n[BUDGET EXHAUSTED] Remaining: ${budget.remaining():.4f}. Stopping.")
-                break
+        # --- Execute sequential leaves (batch C:1-2, individual C:3+) ---
+        if sequential:
+            # Split sequential tasks into batchable (C:1-2) and individual (C:3+)
+            seq_batch = [t for t in sequential if t.complexity <= 2]
+            seq_individual = [t for t in sequential if t.complexity > 2]
 
-            print(f"\n  Executing task sequentially: {task.id}")
-            task.status = "running"
-            contracts_text = load_relevant_contracts(task, dag)
-            result = execute_leaf_task(task, goal, budget, contracts_text)
-            success = result.get("success", False)
-            task.cost_usd += result.get("cost_usd", 0.0)
+            # Batch C:1-2 sequential tasks in one call
+            if len(seq_batch) >= 2 and budget.can_afford():
+                for t in seq_batch:
+                    t.status = "running"
+                batch_result = _execute_batch(seq_batch, goal, budget, dag)
+                success = batch_result.get("success", False)
+                cost_per = batch_result.get("cost_usd", 0.0) / max(len(seq_batch), 1)
 
-            if success:
-                l1_pass = run_l1(task, budget)
-                if l1_pass:
-                    commit_hash = checkpoint_commit(task, success=True)
-                    dag.mark_done(task.id, result)
-                    task.commit_hash = commit_hash
+                for task in seq_batch:
+                    task.cost_usd += cost_per
+                    if success:
+                        l1_pass = run_l1(task, budget)
+                        if l1_pass:
+                            commit_hash = checkpoint_commit(task, success=True)
+                            dag.mark_done(task.id, batch_result)
+                            task.commit_hash = commit_hash
+                        else:
+                            commit_hash = checkpoint_commit(task, success=False)
+                            task.commit_hash = commit_hash
+                            _handle_task_failure(
+                                task, dag, budget, execution_retries,
+                                f"L1 verification failed for {task.id}",
+                            )
+                    else:
+                        commit_hash = checkpoint_commit(task, success=False)
+                        task.commit_hash = commit_hash
+                        _handle_task_failure(
+                            task, dag, budget, execution_retries,
+                            f"Batch execution failed",
+                        )
+            elif len(seq_batch) == 1:
+                seq_individual.insert(0, seq_batch[0])
+
+            # Execute C:3+ (and lone C:1-2) individually
+            for task in seq_individual:
+                if not budget.can_afford():
+                    print(f"\n[BUDGET EXHAUSTED] Remaining: ${budget.remaining():.4f}. Stopping.")
+                    break
+
+                print(f"\n  Executing task sequentially: {task.id}")
+                task.status = "running"
+                contracts_text = load_relevant_contracts(task, dag)
+                result = execute_leaf_task(task, goal, budget, contracts_text)
+                success = result.get("success", False)
+                task.cost_usd += result.get("cost_usd", 0.0)
+
+                if success:
+                    l1_pass = run_l1(task, budget)
+                    if l1_pass:
+                        commit_hash = checkpoint_commit(task, success=True)
+                        dag.mark_done(task.id, result)
+                        task.commit_hash = commit_hash
+                    else:
+                        commit_hash = checkpoint_commit(task, success=False)
+                        task.commit_hash = commit_hash
+                        _handle_task_failure(
+                            task, dag, budget, execution_retries,
+                            f"L1 verification failed for {task.id}",
+                        )
                 else:
                     commit_hash = checkpoint_commit(task, success=False)
                     task.commit_hash = commit_hash
+                    error_msg = result.get("output", "")[:500]
                     _handle_task_failure(
                         task, dag, budget, execution_retries,
-                        f"L1 verification failed for {task.id}",
+                        f"Execution failed: {error_msg}",
                     )
-            else:
-                commit_hash = checkpoint_commit(task, success=False)
-                task.commit_hash = commit_hash
-                error_msg = result.get("output", "")[:500]
-                _handle_task_failure(
-                    task, dag, budget, execution_retries,
-                    f"Execution failed: {error_msg}",
-                )
 
         # --- Propagate status (children all done → parent done) ---
         dag.propagate_status()
