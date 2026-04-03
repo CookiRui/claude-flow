@@ -1268,6 +1268,7 @@ def build_task_prompt(task: RecursiveTask, goal: str) -> str:
         files_list = "\n".join(f"  - {f}" for f in task.files)
         files_section = f"\n## Files to Modify\n{files_list}\n"
 
+    cwd = os.getcwd()
     return f"""You are executing a single sub-task as part of a larger goal.
 
 ## Overall Goal
@@ -1280,12 +1281,17 @@ Description: {task.description}
 ## Acceptance Criteria
 {task.acceptance_criteria}
 {files_section}
+## Working Directory
+Your current working directory is: {cwd}
+IMPORTANT: When the goal specifies a target directory (e.g. "output to X/web/"), you MUST use absolute paths or cd to that directory first. Do NOT create files relative to the current working directory unless the goal explicitly says so.
+
 ## Instructions
 1. Complete the task described above.
-2. Before finishing, verify that ALL acceptance criteria listed above are satisfied.
-3. Once the task is complete and verified, commit your changes with the message:
+2. Use absolute paths for all file operations to ensure files are created in the correct location.
+3. Before finishing, verify that ALL acceptance criteria listed above are satisfied.
+4. Once the task is complete and verified, commit your changes with the message:
    `checkpoint: {task.id} {task.description}`
-4. Do not proceed beyond the scope of this sub-task.
+5. Do not proceed beyond the scope of this sub-task.
 """
 
 
