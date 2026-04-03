@@ -1,23 +1,23 @@
 {
   "goal": "Add a --dry-run flag to scripts/persistent-solve.py that only runs recursive planning and prints the kanban tree, without executing any tasks. This tests the recursive decomposition and kanban output.",
   "start_time": "2026-04-03T14:54:33.119880",
-  "updated_at": "2026-04-03T15:01:52.110277",
+  "updated_at": "2026-04-03T15:03:48.929631",
   "summary": {
     "total": 14,
     "done": 0,
-    "failed": 0,
+    "failed": 3,
     "running": 0,
-    "pending": 14,
-    "total_cost_usd": 0.9544
+    "pending": 11,
+    "total_cost_usd": 1.4446
   },
   "tree": [
     {
       "id": "task-1",
       "description": "Add --dry-run argument to the argparse CLI in main() and pass it through to persistent_solve()",
-      "status": "pending",
+      "status": "failed",
       "complexity": 2,
-      "cost_usd": 0.54057075,
-      "commit_hash": null,
+      "cost_usd": 0.72116475,
+      "commit_hash": "fc44324",
       "children": []
     },
     {
@@ -31,9 +31,9 @@
         {
           "id": "task-2.task-1",
           "description": "Add --dry-run argparse flag to main() and propagate it through persistent_solve() to _run_dag_mode()",
-          "status": "pending",
+          "status": "failed",
           "complexity": 2,
-          "cost_usd": 0.2507925,
+          "cost_usd": 0.454181,
           "commit_hash": null,
           "children": []
         },
@@ -48,10 +48,10 @@
             {
               "id": "task-2.task-2.add-dry-run-param",
               "description": "Add dry_run: bool = False parameter to _run_dag_mode signature and wire it from the CLI argparse",
-              "status": "pending",
+              "status": "failed",
               "complexity": 2,
-              "cost_usd": 0.163059,
-              "commit_hash": "e66395a",
+              "cost_usd": 0.269205,
+              "commit_hash": null,
               "children": []
             },
             {
