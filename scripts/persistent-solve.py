@@ -2099,7 +2099,7 @@ def persistent_solve(
         _run_dag_mode(
             goal, max_rounds, max_time, budget, start_time, skip_clarify,
             recursive=recursive, kanban=kanban, kanban_path=kanban_path,
-            verify_level=verify_level,
+            verify_level=verify_level, dry_run=dry_run,
         )
     else:
         _run_legacy_mode(goal, max_rounds, max_time, budget, start_time)
@@ -2123,6 +2123,7 @@ def _run_dag_mode(
     kanban: bool = False,
     kanban_path: str = None,
     verify_level: str = "auto",
+    dry_run: bool = False,
 ):
     """DAG mode: plan once, execute sub-tasks atomically with budget control.
 
