@@ -44,3 +44,4 @@ Replace `<goal>` with the user's $ARGUMENTS.
 | `--kanban-port N` | HTTP server port (default: 8420) |
 | `--dry-run` | Only plan, print kanban tree, don't execute |
 | `--no-clarify` | Skip goal clarification, go straight to planning |
+| `--resume` | Resume from existing kanban.json, skip re-planning |

@@ -1407,3 +1407,181 @@ class TestDryRunDagMode:
             mock_clarify.assert_called_once()
             mock_plan.assert_called_once()
             mock_execute.assert_not_called()
+
+
+# ============================================================
+# Kanban Resume tests
+# ============================================================
+
+class TestKanbanResume:
+    """Tests for the kanban resume feature: enrich kanban dict, reconstruct DAG,
+    scan checkpoint commits, and --resume flag integration."""
+
+    def _make_dag_with_tree(self):
+        """Create a DAG with parent-child structure for resume tests."""
+        parent = RecursiveTask(
+            id="backend", description="Build backend",
+            acceptance_criteria="All APIs work",
+            dependencies=[], files=[],
+            complexity=4, leaf=False,
+            children=["backend.api", "backend.db"],
+        )
+        child1 = RecursiveTask(
+            id="backend.api", description="Build API endpoints",
+            acceptance_criteria="GET /api/tree returns 200",
+            dependencies=[], files=["app.py"],
+            complexity=2, leaf=True,
+            parent="backend", depth=1,
+            status="done", commit_hash="abc1234", cost_usd=0.5,
+        )
+        child2 = RecursiveTask(
+            id="backend.db", description="Build DB layer",
+            acceptance_criteria="Index builds on startup",
+            dependencies=["backend.api"], files=["db.py", "index.py"],
+            complexity=3, leaf=True,
+            parent="backend", depth=1,
+        )
+        frontend = RecursiveTask(
+            id="frontend", description="Build frontend",
+            acceptance_criteria="SPA loads in browser",
+            dependencies=["backend"], files=["index.html", "app.js"],
+            complexity=3, leaf=True,
+        )
+        return RecursiveDAG([parent, child1, child2, frontend])
+
+    # ---- Behavior 1: to_kanban_dict includes resume fields ----
+
+    def test_kanban_dict_includes_acceptance_criteria(self):
+        dag = self._make_dag_with_tree()
+        kanban = dag.to_kanban_dict()
+        node = kanban["tree"][0]  # "backend" root
+        assert "acceptance_criteria" in node
+        assert node["acceptance_criteria"] == "All APIs work"
+
+    def test_kanban_dict_includes_files(self):
+        dag = self._make_dag_with_tree()
+        kanban = dag.to_kanban_dict()
+        # Check child node with files
+        backend_node = kanban["tree"][0]
+        api_child = backend_node["children"][0]  # backend.api
+        assert "files" in api_child
+        assert api_child["files"] == ["app.py"]
+
+    def test_kanban_dict_includes_dependencies(self):
+        dag = self._make_dag_with_tree()
+        kanban = dag.to_kanban_dict()
+        # frontend depends on backend
+        frontend_node = kanban["tree"][1]  # frontend is second root
+        assert "dependencies" in frontend_node
+        assert frontend_node["dependencies"] == ["backend"]
+
+    def test_kanban_dict_includes_leaf_flag(self):
+        dag = self._make_dag_with_tree()
+        kanban = dag.to_kanban_dict()
+        backend_node = kanban["tree"][0]
+        assert "leaf" in backend_node
+        assert backend_node["leaf"] is False
+        api_child = backend_node["children"][0]
+        assert api_child["leaf"] is True
+
+    # ---- Behavior 2: reconstruct_dag_from_kanban ----
+
+    def test_reconstruct_dag_roundtrip(self):
+        """to_kanban_dict -> reconstruct_dag_from_kanban should preserve task structure."""
+        dag = self._make_dag_with_tree()
+        kanban = dag.to_kanban_dict()
+        rebuilt = ps.reconstruct_dag_from_kanban(kanban)
+        assert set(rebuilt.tasks.keys()) == set(dag.tasks.keys())
+
+    def test_reconstruct_preserves_status(self):
+        dag = self._make_dag_with_tree()
+        kanban = dag.to_kanban_dict()
+        rebuilt = ps.reconstruct_dag_from_kanban(kanban)
+        assert rebuilt.tasks["backend.api"].status == "done"
+        assert rebuilt.tasks["backend.db"].status == "pending"
+
+    def test_reconstruct_preserves_dependencies(self):
+        dag = self._make_dag_with_tree()
+        kanban = dag.to_kanban_dict()
+        rebuilt = ps.reconstruct_dag_from_kanban(kanban)
+        assert rebuilt.tasks["backend.db"].dependencies == ["backend.api"]
+        assert rebuilt.tasks["frontend"].dependencies == ["backend"]
+
+    def test_reconstruct_preserves_parent_children(self):
+        dag = self._make_dag_with_tree()
+        kanban = dag.to_kanban_dict()
+        rebuilt = ps.reconstruct_dag_from_kanban(kanban)
+        assert rebuilt.tasks["backend"].children == ["backend.api", "backend.db"]
+        assert rebuilt.tasks["backend.api"].parent == "backend"
+
+    def test_reconstruct_preserves_commit_hash(self):
+        dag = self._make_dag_with_tree()
+        kanban = dag.to_kanban_dict()
+        rebuilt = ps.reconstruct_dag_from_kanban(kanban)
+        assert rebuilt.tasks["backend.api"].commit_hash == "abc1234"
+
+    def test_reconstruct_preserves_acceptance_criteria(self):
+        dag = self._make_dag_with_tree()
+        kanban = dag.to_kanban_dict()
+        rebuilt = ps.reconstruct_dag_from_kanban(kanban)
+        assert rebuilt.tasks["backend.api"].acceptance_criteria == "GET /api/tree returns 200"
+
+    # ---- Behavior 3: scan_checkpoint_commits ----
+
+    def test_scan_checkpoint_commits_parses_git_log(self):
+        fake_log = (
+            "abc1234 checkpoint: backend.api Build API endpoints\n"
+            "def5678 checkpoint: backend.db Build DB layer\n"
+            "ghi9012 [FAILED] checkpoint: frontend Build frontend\n"
+            "jkl3456 feat: unrelated commit\n"
+        )
+        with patch.object(ps, "_git_log_checkpoints", return_value=fake_log):
+            result = ps.scan_checkpoint_commits()
+        assert result["backend.api"] == {"hash": "abc1234", "failed": False}
+        assert result["backend.db"] == {"hash": "def5678", "failed": False}
+        assert result["frontend"] == {"hash": "ghi9012", "failed": True}
+        assert "jkl3456" not in str(result)
+
+    def test_scan_checkpoint_commits_empty_log(self):
+        with patch.object(ps, "_git_log_checkpoints", return_value=""):
+            result = ps.scan_checkpoint_commits()
+        assert result == {}
+
+    # ---- Behavior 4: resume integration in _run_dag_mode ----
+
+    def test_run_dag_mode_resume_skips_planning(self):
+        """When --resume and kanban.json exists, planning should be skipped."""
+        dag = self._make_dag_with_tree()
+        kanban_data = {
+            "goal": "test goal",
+            "start_time": "2026-04-04T00:00:00",
+            "updated_at": "2026-04-04T00:00:00",
+            "summary": dag.to_kanban_dict()["summary"],
+            "tree": dag.to_kanban_dict()["tree"],
+            "planning_steps": [],
+        }
+
+        with patch.object(ps, "recursive_plan") as mock_plan, \
+             patch.object(ps, "plan_dag") as mock_flat_plan, \
+             patch.object(ps, "execute_recursive_dag") as mock_exec, \
+             patch.object(ps, "scan_checkpoint_commits", return_value={}), \
+             patch("builtins.open", create=True), \
+             patch("os.path.exists", return_value=True), \
+             patch("json.load", return_value=kanban_data):
+
+            budget = BudgetTracker(max_budget_usd=10.0, per_task_budget_usd=1.0)
+            ps._run_dag_mode(
+                goal="test goal",
+                max_rounds=1,
+                max_time=3600,
+                budget=budget,
+                start_time=time.time(),
+                skip_clarify=True,
+                recursive=True,
+                kanban=True,
+                resume=True,
+            )
+
+            mock_plan.assert_not_called()
+            mock_flat_plan.assert_not_called()
+            mock_exec.assert_called_once()

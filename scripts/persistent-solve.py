@@ -286,8 +286,12 @@ class RecursiveDAG:
             node = {
                 "id": task.id,
                 "description": task.description,
+                "acceptance_criteria": task.acceptance_criteria,
+                "dependencies": task.dependencies,
+                "files": task.files,
                 "status": task.status,
                 "complexity": task.complexity,
+                "leaf": task.leaf,
                 "cost_usd": task.cost_usd,
                 "commit_hash": task.commit_hash,
                 "children": [
@@ -303,6 +307,41 @@ class RecursiveDAG:
         tree = [_build_node(r) for r in roots]
 
         return {"summary": counts, "tree": tree}
+
+
+def reconstruct_dag_from_kanban(kanban_data: dict) -> RecursiveDAG:
+    """Rebuild a RecursiveDAG from an enriched kanban.json dict.
+
+    Walks the nested tree structure and reconstructs RecursiveTask objects
+    with all fields needed for execution (acceptance_criteria, files,
+    dependencies, parent/children links, status, commit_hash, etc.).
+    """
+    tasks = []
+
+    def _walk(node: dict, parent_id: str = None):
+        children_ids = [c["id"] for c in node.get("children", [])]
+        task = RecursiveTask(
+            id=node["id"],
+            description=node.get("description", ""),
+            acceptance_criteria=node.get("acceptance_criteria", ""),
+            dependencies=node.get("dependencies", []),
+            files=node.get("files", []),
+            status=node.get("status", "pending"),
+            complexity=node.get("complexity", 1),
+            leaf=node.get("leaf", not bool(children_ids)),
+            cost_usd=node.get("cost_usd", 0.0),
+            commit_hash=node.get("commit_hash"),
+            children=children_ids,
+            parent=parent_id,
+        )
+        tasks.append(task)
+        for child_node in node.get("children", []):
+            _walk(child_node, parent_id=node["id"])
+
+    for root_node in kanban_data.get("tree", []):
+        _walk(root_node)
+
+    return RecursiveDAG(tasks)
 
 
 # ============================================================
@@ -1401,6 +1440,46 @@ def execute_parallel(tasks: list, goal: str, budget: BudgetTracker) -> list:
     return results
 
 
+def _git_log_checkpoints() -> str:
+    """Run git log and return lines containing checkpoint commits."""
+    try:
+        result = subprocess.run(
+            ["git", "log", "--oneline", "--all", "--grep=checkpoint:"],
+            capture_output=True, text=True, timeout=30,
+        )
+        return result.stdout.strip()
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return ""
+
+
+def scan_checkpoint_commits() -> dict:
+    """Scan git history for checkpoint commits and return a mapping of task_id -> info.
+
+    Returns:
+        dict: {task_id: {"hash": str, "failed": bool}} for each found checkpoint.
+    """
+    log_output = _git_log_checkpoints()
+    if not log_output:
+        return {}
+
+    result = {}
+    for line in log_output.strip().split("\n"):
+        if not line.strip():
+            continue
+        # Format: "abc1234 checkpoint: task.id Description..."
+        # or:     "abc1234 [FAILED] checkpoint: task.id Description..."
+        failed = "[FAILED]" in line
+        match = re.match(r"^(\w+)\s+(?:\[FAILED\]\s+)?checkpoint:\s+(\S+)", line)
+        if match:
+            commit_hash = match.group(1)
+            task_id = match.group(2)
+            # Keep the latest (first in log) entry for each task
+            if task_id not in result:
+                result[task_id] = {"hash": commit_hash, "failed": failed}
+
+    return result
+
+
 def checkpoint_commit(task: RecursiveTask, success: bool, launch_dir: str = None) -> Optional[str]:
     """Create a git checkpoint commit for a completed task.
 
@@ -2277,6 +2356,7 @@ def persistent_solve(
     dry_run: bool = False,
     kanban_serve: bool = False,
     kanban_port: int = 8420,
+    resume: bool = False,
 ):
     """Main persistent loop logic.
 
@@ -2316,7 +2396,7 @@ def persistent_solve(
         _run_dag_mode(
             goal, max_rounds, max_time, budget, start_time, skip_clarify,
             recursive=recursive, kanban=kanban, kanban_path=kanban_path,
-            verify_level=verify_level, dry_run=dry_run,
+            verify_level=verify_level, dry_run=dry_run, resume=resume,
         )
     else:
         _run_legacy_mode(goal, max_rounds, max_time, budget, start_time)
@@ -2341,11 +2421,17 @@ def _run_dag_mode(
     kanban_path: str = None,
     verify_level: str = "auto",
     dry_run: bool = False,
+    resume: bool = False,
 ):
     """DAG mode: plan once, execute sub-tasks atomically with budget control.
 
     When *recursive* is True, uses recursive_plan + execute_recursive_dag
     instead of the flat plan_dag + execute_dag pipeline.
+
+    When *resume* is True and a kanban.json exists, skips planning and
+    reconstructs the DAG from the existing kanban. Tasks already marked
+    done (or with matching checkpoint commits) are preserved; only
+    pending tasks are executed.
     """
     launch_dir = os.getcwd()
     original_goal = goal
@@ -2371,6 +2457,36 @@ def _run_dag_mode(
 
     dag = None  # Will be set in the loop; used after loop for summary
 
+    # ── Resume: load existing kanban instead of planning ──
+    resumed_dag = None
+    if resume:
+        resume_path = kanban_out or kanban_path or os.path.join(WIP_DIR, "kanban.json")
+        if os.path.exists(resume_path):
+            with open(resume_path, "r", encoding="utf-8") as f:
+                kanban_data = json.load(f)
+            resumed_dag = reconstruct_dag_from_kanban(kanban_data)
+
+            # Cross-reference git checkpoint commits to update task statuses
+            checkpoints = scan_checkpoint_commits()
+            for task_id, info in checkpoints.items():
+                if task_id in resumed_dag.tasks and not info["failed"]:
+                    task = resumed_dag.tasks[task_id]
+                    if task.status != "done":
+                        task.status = "done"
+                        task.commit_hash = info["hash"]
+            resumed_dag.propagate_status()
+
+            done_count = sum(1 for t in resumed_dag.tasks.values() if t.status == "done")
+            total_count = len(resumed_dag.tasks)
+            print(f"\n  [Resume] Loaded {total_count} tasks from {resume_path}, {done_count} already done")
+
+            if resumed_dag.all_done():
+                print("  [Resume] All tasks already completed!")
+                if kanban_state:
+                    kanban_state.update_from_dag(resumed_dag)
+                    kanban_state.save(kanban_out)
+                return
+
     for round_num in range(1, max_rounds + 1):
         elapsed = time.time() - start_time
         if elapsed >= max_time:
@@ -2388,8 +2504,12 @@ def _run_dag_mode(
             print(f"  Mode: recursive | Verify: {verify_level}")
         print(f"{'─'*60}")
 
-        # Phase 1: Plan
-        if recursive:
+        # Phase 1: Plan (or use resumed DAG)
+        if resumed_dag is not None:
+            dag = resumed_dag
+            resumed_dag = None  # only use once; subsequent rounds re-plan
+            print(f"  [Resume] Using restored DAG ({len(dag.tasks)} tasks)")
+        elif recursive:
             if kanban_state:
                 kanban_state.planning_steps = []
             dag = recursive_plan(
@@ -2710,6 +2830,11 @@ def main():
         "--verify-level", choices=["auto", "l1", "l2", "l3"], default="auto",
         help="Verification level: 'auto' (based on complexity), 'l1', 'l2', 'l3' (default: auto)"
     )
+    parser.add_argument(
+        "--resume", action="store_true",
+        help="Resume from existing kanban.json instead of re-planning. "
+             "Skips planning phase; uses checkpoint commits to detect completed tasks."
+    )
 
     args = parser.parse_args()
     persistent_solve(
@@ -2727,6 +2852,7 @@ def main():
         dry_run=args.dry_run,
         kanban_serve=args.kanban_serve,
         kanban_port=args.kanban_port,
+        resume=args.resume,
     )
 
 
