@@ -1,4 +1,5 @@
 ---
+name: autosolve
 description: "Launch persistent shell scheduler with kanban board"
 argument-hint: <goal description>
 ---

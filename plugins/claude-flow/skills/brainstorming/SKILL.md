@@ -1,4 +1,5 @@
 ---
+name: brainstorming
 description: "Design exploration and requirements refinement: idea generation, requirements clarification, trade-off analysis. Use when starting a new feature, exploring design alternatives, or when requirements are vague or conflicting."
 ---
 

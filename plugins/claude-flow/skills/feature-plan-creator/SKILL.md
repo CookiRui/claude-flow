@@ -1,4 +1,5 @@
 ---
+name: feature-plan-creator
 description: "Analyze requirements and generate a technical plan"
 argument-hint: <feature-name>
 ---

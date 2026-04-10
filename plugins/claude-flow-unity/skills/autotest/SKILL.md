@@ -1,4 +1,5 @@
 ---
+name: autotest
 description: "Unity AutoTest framework skill. Covers IInputProvider pattern, TestCase JSON format, TestAction/TestCondition lifecycle, and batch mode execution for automated PlayMode testing."
 ---
 

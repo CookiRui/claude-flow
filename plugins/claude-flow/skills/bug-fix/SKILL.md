@@ -1,4 +1,5 @@
 ---
+name: bug-fix
 description: "Diagnose and fix bugs, solidify learnings into Rules/Skills/Memory"
 argument-hint: <bug description>
 ---

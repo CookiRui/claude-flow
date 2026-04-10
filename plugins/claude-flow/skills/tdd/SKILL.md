@@ -1,4 +1,5 @@
 ---
+name: tdd
 description: "TDD development: test-driven development, RED-GREEN-REFACTOR, unit tests, integration tests. Use when implementing new features, refactoring code, verifying bug fixes, or writing tests."
 ---
 

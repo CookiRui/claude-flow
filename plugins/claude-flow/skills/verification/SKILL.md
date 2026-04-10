@@ -1,4 +1,5 @@
 ---
+name: verification
 description: "Pre-completion verification: code submission checks, feature completion validation, bug fix confirmation, constitution compliance audit. Use when a task is about to complete, code is ready to commit, or declaring a feature done."
 ---
 

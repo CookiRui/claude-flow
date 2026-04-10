@@ -1,4 +1,5 @@
 ---
+name: deep-task
 description: "Autonomous 8-layer deep execution engine for complex tasks"
 argument-hint: <goal description>
 ---

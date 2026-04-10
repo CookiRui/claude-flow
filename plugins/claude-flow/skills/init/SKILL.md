@@ -1,4 +1,5 @@
 ---
+name: init
 description: "Analyze the codebase and generate project-level configuration (constitution, rules, CLAUDE.md). Use after installing the claude-flow plugin to set up project-specific files."
 argument-hint: [project description] [--lang en]
 ---

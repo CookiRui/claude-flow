@@ -1,4 +1,5 @@
 ---
+name: init-unity
 description: "Analyze Unity project and generate project-specific configuration. Detects editor path, namespaces, scenes, assemblies, and fills all project-level placeholders."
 argument-hint: [--force]
 ---

@@ -1,4 +1,5 @@
 ---
+name: upgrade
 description: "Upgrade claude-flow plugin and project-level configuration"
 argument-hint: [--force]
 ---
