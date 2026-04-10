@@ -25,15 +25,43 @@
 
 ## 快速开始
 
-### 1. 安装到你的项目
+### 方式 A：Claude Code 插件（推荐）
+
+直接在 Claude Code 中安装，无需复制文件到项目：
 
 ```bash
-# 方式 A：npx（推荐）
+# 1. 添加插件市场
+/plugin marketplace add CookiRui/claude-flow
+
+# 2. 安装核心插件
+/plugin install claude-flow@claude-flow
+
+# 3. （可选）安装 Unity 开发插件
+/plugin install claude-flow-unity@claude-flow
+
+# 4. 初始化项目配置
+/claude-flow:init
+```
+
+**插件提供的能力**（安装即可用，无需配置）：
+- Skills: `/claude-flow:tdd`, `/claude-flow:verification`, `/claude-flow:brainstorming`, `/claude-flow:deep-task`, `/claude-flow:bug-fix`, `/claude-flow:feature-plan-creator`, `/claude-flow:autosolve`, `/claude-flow:upgrade`
+- Agents: `feature-builder`, `code-reviewer`, `test-writer`
+- Hooks: 文件保护、危险命令拦截、上下文恢复、compact 前保存、lint 反馈
+- Scripts: `persistent-solve.py`, `repo-map.py`, `scope-loader.py`, `lint-feedback.sh`
+
+运行 `/claude-flow:init` 会自动分析你的项目并生成项目级配置（constitution、rules、CLAUDE.md 等）。
+
+### 方式 B：npx 安装
+
+```bash
 npx claude-autosolve init                              # 安装核心到当前目录
 npx claude-autosolve init --preset unity               # 安装核心 + Unity preset
 npx claude-autosolve init /path/to/project --force     # 安装到指定目录，强制覆盖
+```
 
-# 方式 B：Python
+### 方式 C：Python 安装
+
+```bash
 git clone https://github.com/CookiRui/claude-flow.git
 cd claude-flow
 python install.py /path/to/your-project                # 核心
@@ -44,12 +72,13 @@ python install.py /path/to/your-project --preset unity  # 核心 + Unity
 
 **可用 Preset**：`unity`（更多引擎 preset 计划中）
 
-### 2. 让 AI 自动配置
+### 让 AI 自动配置
 
 在项目目录下启动 Claude Code，运行：
 
 ```
-/init-project
+/claude-flow:init          # 插件方式
+/init-project              # npx/Python 安装方式
 ```
 
 **已有项目** — AI 会自动：
@@ -93,17 +122,43 @@ python scripts/persistent-solve.py "重构整个数据层架构" --max-budget-us
 
 ## 内置命令
 
-| 命令 | 用途 |
-|------|------|
-| `/init-project` | 自动分析项目并生成所有 claude-flow 配置 |
-| `/feature-plan-creator <name>` | 需求确认 → 技术方案 → ≤5 分钟微任务拆解 |
-| `/bug-fix <description>` | 根因诊断 → 回归测试 → 修复 → 经验固化 |
-| `/deep-task <goal>` | 8 层自主引擎：复杂度分流 → DAG 分解 → 并行 Agent → 三级验证 → 元学习 |
-| `/upgrade` | 升级 claude-flow 模板到最新版本（检测新增/冲突/安全更新） |
+> 插件方式使用 `/claude-flow:` 前缀（如 `/claude-flow:deep-task`），npx/Python 安装使用无前缀版本（如 `/deep-task`）。
+
+| 插件命令 | 安装命令 | 用途 |
+|---------|---------|------|
+| `/claude-flow:init` | `/init-project` | 自动分析项目并生成所有 claude-flow 配置 |
+| `/claude-flow:feature-plan-creator <name>` | `/feature-plan-creator <name>` | 需求确认 → 技术方案 → ≤5 分钟微任务拆解 |
+| `/claude-flow:bug-fix <description>` | `/bug-fix <description>` | 根因诊断 → 回归测试 → 修复 → 经验固化 |
+| `/claude-flow:deep-task <goal>` | `/deep-task <goal>` | 8 层自主引擎：复杂度分流 → DAG 分解 → 并行 Agent → 三级验证 → 元学习 |
+| `/claude-flow:autosolve <goal>` | `/autosolve <goal>` | 持久化 DAG 调度器 + 看板可视化 |
+| `/claude-flow:upgrade` | `/upgrade` | 升级 claude-flow 到最新版本 |
+| `/claude-flow:tdd` | (Skill) | TDD 强制执行：RED-GREEN-REFACTOR 循环 |
+| `/claude-flow:verification` | (Skill) | 完成前验证：5 维度检查清单 |
+| `/claude-flow:brainstorming` | (Skill) | 设计探索：苏格拉底式需求细化 |
 
 ---
 
 ## 项目结构
+
+### 插件结构（Claude Code Marketplace）
+
+```
+plugins/
+├── claude-flow/                       # 核心插件
+│   ├── .claude-plugin/plugin.json     # 插件清单
+│   ├── skills/                        # 9 个 Skill（tdd/verification/deep-task/...）
+│   ├── agents/                        # 3 个 Agent（feature-builder/code-reviewer/test-writer）
+│   ├── hooks/                         # 6 个 Hook 脚本 + hooks.json
+│   └── bin/                           # CLI 工具（persistent-solve/repo-map/scope-loader/...）
+└── claude-flow-unity/                 # Unity 引擎插件
+    ├── .claude-plugin/plugin.json     # 插件清单
+    ├── skills/                        # autotest + init-unity
+    ├── agents/                        # unity-dev + git-ops
+    ├── hooks/                         # .meta 验证 hook
+    └── bin/                           # Unity batch mode 脚本
+```
+
+### 模板结构（npx/Python 安装）
 
 ```
 template/                              # 核心模板（所有项目都装）

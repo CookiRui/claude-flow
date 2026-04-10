@@ -1,0 +1,23 @@
+{
+  "name": "claude-flow",
+  "version": "2.0.0",
+  "description": "Structured project cognition + autonomous execution framework for Claude Code. 4-layer config, 8-layer deep-task engine, TDD enforcement, adversarial review, and persistent DAG scheduler.",
+  "author": {
+    "name": "CookiRui",
+    "url": "https://github.com/CookiRui"
+  },
+  "homepage": "https://github.com/CookiRui/claude-flow",
+  "repository": "https://github.com/CookiRui/claude-flow",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "framework",
+    "tdd",
+    "deep-task",
+    "dag",
+    "autonomous",
+    "workflow",
+    "code-review",
+    "verification"
+  ]
+}

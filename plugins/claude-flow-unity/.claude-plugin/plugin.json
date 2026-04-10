@@ -1,0 +1,20 @@
+{
+  "name": "claude-flow-unity",
+  "version": "2.0.0",
+  "description": "Unity game development preset for claude-flow. C# agents, batch mode scripts, .meta validation hooks, AutoTest framework skill.",
+  "author": {
+    "name": "CookiRui",
+    "url": "https://github.com/CookiRui"
+  },
+  "homepage": "https://github.com/CookiRui/claude-flow",
+  "repository": "https://github.com/CookiRui/claude-flow",
+  "license": "MIT",
+  "keywords": [
+    "unity",
+    "gamedev",
+    "csharp",
+    "batch-mode",
+    "autotest",
+    "nunit"
+  ]
+}

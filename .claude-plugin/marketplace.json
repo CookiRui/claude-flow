@@ -1,0 +1,24 @@
+{
+  "name": "claude-flow",
+  "owner": {
+    "name": "CookiRui",
+    "url": "https://github.com/CookiRui"
+  },
+  "metadata": {
+    "description": "Structured project cognition + autonomous execution framework for Claude Code",
+    "version": "2.0.0",
+    "pluginRoot": "./plugins"
+  },
+  "plugins": [
+    {
+      "name": "claude-flow",
+      "description": "Core framework: skills, agents, hooks, and CLI tools for structured AI-driven development",
+      "source": "./claude-flow"
+    },
+    {
+      "name": "claude-flow-unity",
+      "description": "Unity game development preset: C# agents, batch mode scripts, .meta validation hooks",
+      "source": "./claude-flow-unity"
+    }
+  ]
+}
