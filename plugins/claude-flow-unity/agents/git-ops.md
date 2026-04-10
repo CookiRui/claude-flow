@@ -2,8 +2,14 @@
 name: git-ops
 description: "Git operations specialist for Unity projects. Handles .meta validation, Unity YAML merge conflicts, LFS operations, and atomic commits."
 model: haiku
-tools: Read, Grep, Glob, Bash
-disallowedTools: Write, Edit
+tools:
+  - Read
+  - Grep
+  - Glob
+  - Bash
+disallowedTools:
+  - Write
+  - Edit
 ---
 
 # git-ops

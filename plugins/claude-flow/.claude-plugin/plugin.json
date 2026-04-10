@@ -19,5 +19,8 @@
     "workflow",
     "code-review",
     "verification"
-  ]
+  ],
+  "skills": "skills",
+  "agents": "agents",
+  "hooks": "hooks/hooks.json"
 }

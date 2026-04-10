@@ -16,5 +16,8 @@
     "batch-mode",
     "autotest",
     "nunit"
-  ]
+  ],
+  "skills": "skills",
+  "agents": "agents",
+  "hooks": "hooks/hooks.json"
 }
