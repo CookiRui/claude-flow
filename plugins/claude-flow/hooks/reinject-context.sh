@@ -23,6 +23,11 @@ main() {
         echo "--- [constitution: $CONSTITUTION_FILE] ---"
         cat "$CONSTITUTION_FILE"
         echo ""
+    elif [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/defaults/constitution.md" ]; then
+        # Fallback: use plugin's built-in generic constitution
+        echo "--- [constitution: plugin default (run /claude-flow:init for project-specific rules)] ---"
+        cat "${CLAUDE_PLUGIN_ROOT}/defaults/constitution.md"
+        echo ""
     fi
 
     # --- Inject L0 code map (if generated) ---
