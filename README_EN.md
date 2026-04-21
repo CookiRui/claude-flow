@@ -97,6 +97,7 @@ python scripts/persistent-solve.py "Refactor the entire data layer" --max-budget
 | `/bug-fix <description>` | Root cause diagnosis → Regression test → Fix → Learning capture |
 | `/deep-task <goal>` | 8-layer engine: Complexity routing → DAG → Parallel Agents → 3-level verification → Meta-learning |
 | `/upgrade` | Upgrade claude-flow templates to latest version (detect new/conflict/safe updates) |
+| `/install-codex` | Install OpenAI's codex-plugin-cc — use Codex (code review / task delegation) inside Claude Code |
 
 ---
 

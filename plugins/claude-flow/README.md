@@ -17,7 +17,7 @@ Structured project cognition + autonomous execution framework for Claude Code.
 
 ## What's Included
 
-### Skills (9)
+### Skills (10)
 
 | Skill | Description |
 |-------|-------------|
@@ -30,6 +30,7 @@ Structured project cognition + autonomous execution framework for Claude Code.
 | `/claude-flow:autosolve <goal>` | Persistent DAG scheduler with kanban visualization |
 | `/claude-flow:init` | Analyze codebase, generate project-level config (constitution, rules, CLAUDE.md) |
 | `/claude-flow:upgrade` | Upgrade plugin and project-level configuration |
+| `/claude-flow:install-codex` | Install OpenAI's codex-plugin-cc — use Codex (code review / task delegation) inside Claude Code |
 
 ### Agents (3)
 

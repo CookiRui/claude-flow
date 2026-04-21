@@ -132,6 +132,7 @@ python scripts/persistent-solve.py "重构整个数据层架构" --max-budget-us
 | `/claude-flow:deep-task <goal>` | `/deep-task <goal>` | 8 层自主引擎：复杂度分流 → DAG 分解 → 并行 Agent → 三级验证 → 元学习 |
 | `/claude-flow:autosolve <goal>` | `/autosolve <goal>` | 持久化 DAG 调度器 + 看板可视化 |
 | `/claude-flow:upgrade` | `/upgrade` | 升级 claude-flow 到最新版本 |
+| `/claude-flow:install-codex` | `/install-codex` | 在 Claude Code 内安装 OpenAI codex-plugin-cc，调用 Codex 做代码审查 / 任务委托 |
 | `/claude-flow:tdd` | (Skill) | TDD 强制执行：RED-GREEN-REFACTOR 循环 |
 | `/claude-flow:verification` | (Skill) | 完成前验证：5 维度检查清单 |
 | `/claude-flow:brainstorming` | (Skill) | 设计探索：苏格拉底式需求细化 |
