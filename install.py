@@ -60,6 +60,7 @@ TEMPLATE_ITEMS = [
     ".claude/commands/deep-task.md",
     ".claude/commands/upgrade.md",
     ".claude/commands/autosolve.md",
+    ".claude/commands/install-codex.md",
 ]
 
 SCRIPT_ITEMS = [
