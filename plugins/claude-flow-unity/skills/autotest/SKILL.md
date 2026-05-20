@@ -9,6 +9,25 @@ Skill for writing and running automated PlayMode tests using the AutoTest framew
 
 ---
 
+## Prerequisites
+
+AutoTest depends on a C# runtime that must exist inside the Unity project's `Assets/` folder. The runtime is shipped with this plugin under `${CLAUDE_PLUGIN_ROOT}/unity-runtime/` and is copied into the project by `/claude-flow-unity:init-unity`.
+
+Required classes (provided by the runtime):
+
+| Class | Path | Role |
+|-------|------|------|
+| `IInputProvider` | `Assets/Scripts/Gameplay/AutoTest/` | Input abstraction interface |
+| `TestInputProvider` | `Assets/Scripts/Gameplay/AutoTest/` | Programmatic input provider used during tests |
+| `AutoTestBridge` | `Assets/Scripts/Gameplay/AutoTest/` | Singleton bridging gameplay → AutoTest |
+| `AutoTestRunner` | `Assets/Scripts/Tools/Editor/AutoTest/Runner/` | Step execution + condition polling |
+| `BatchPlayModeRunner` | `Assets/Scripts/Tools/Editor/BatchMode/` | Entry point invoked by `unity-game-test.sh -executeMethod` |
+| `TypeRegistry` | `Assets/Scripts/Tools/Editor/AutoTest/Core/` | Maps JSON `action` / `condition` strings → C# types |
+
+If `/claude-flow-unity:init-unity` has NOT been run, or these classes are missing, batch mode commands will fail with `Method not found` errors at `executeMethod`. Run `/claude-flow-unity:init-unity` first.
+
+---
+
 ## Core Concepts
 
 ### IInputProvider Pattern

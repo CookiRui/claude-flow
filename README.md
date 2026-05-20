@@ -43,6 +43,8 @@
 /claude-flow:init
 ```
 
+> **Unity 用户注意**：插件方式与 `--preset unity` 现在**等价** —— 插件内含 `unity-runtime/` C# 代码，`/claude-flow-unity:init-unity` 会自动复制到你的 `Assets/Scripts/`。autotest 工作流可直接使用，无需额外操作。
+
 **插件提供的能力**（安装即可用，无需配置）：
 - Skills: `/claude-flow:tdd`, `/claude-flow:verification`, `/claude-flow:brainstorming`, `/claude-flow:deep-task`, `/claude-flow:bug-fix`, `/claude-flow:feature-plan-creator`, `/claude-flow:autosolve`, `/claude-flow:upgrade`
 - Agents: `feature-builder`, `code-reviewer`, `test-writer`

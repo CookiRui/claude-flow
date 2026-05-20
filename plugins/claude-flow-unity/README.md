@@ -51,13 +51,20 @@ Unity game development preset for [claude-flow](https://github.com/CookiRui/clau
 | `unity-parse-test-results.py` | Test result parser (JUnit XML) |
 | `gitea-api.sh` | Gitea API integration |
 
+## Unity Runtime (C# code)
+
+The plugin ships an `unity-runtime/` directory containing the AutoTest framework and batch mode entry points (`BatchPlayModeRunner`, `AutoTestRunner`, `UnityOpsRunner`, `IInputProvider`, ~26 C# files + 3 asmdef). These are **required** for the autotest skill and batch mode scripts to work — without them, `unity-game-test.sh -executeMethod ...` fails because the C# classes do not exist in your project.
+
+`/claude-flow-unity:init-unity` copies the runtime into your project's `Assets/Scripts/` automatically. If you only want the skill documentation without the runtime, skip the init step (but autotest will be non-functional).
+
 ## Setup
 
 After installing, run `/claude-flow-unity:init-unity` in your Unity project directory. It will:
 1. Auto-detect Unity editor path, version, namespaces, scenes, assemblies
 2. Generate Unity-specific constitution and rules
 3. Configure batch mode scripts with detected paths
-4. Set up protected paths (ProjectSettings/, Library/)
+4. **Copy `unity-runtime/` C# code into `Assets/Scripts/`** (skipping files that already exist)
+5. Set up protected paths (ProjectSettings/, Library/)
 
 ## Links
 

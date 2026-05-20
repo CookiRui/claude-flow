@@ -67,6 +67,20 @@ Present detected values via AskUserQuestion. **Must wait for confirmation.**
 
 Generate project-level configuration:
 
+### Unity Runtime (C# code → user's Assets/)
+The plugin ships an `unity-runtime/` directory at `${CLAUDE_PLUGIN_ROOT}/unity-runtime/`. Copy its contents into the project so AutoTest / batch mode have the C# classes they invoke:
+
+- `unity-runtime/Scripts/Gameplay/AutoTest/` → `<UNITY_ROOT>/Assets/Scripts/Gameplay/AutoTest/`
+- `unity-runtime/Scripts/Tools/Editor/` → `<UNITY_ROOT>/Assets/Scripts/Tools/Editor/`
+- `unity-runtime/Scripts/Tests/Editor/` → `<UNITY_ROOT>/Assets/Scripts/Tests/Editor/`
+
+Rules:
+- Skip files that already exist (do not overwrite user code).
+- Rename asmdef files containing `{root-namespace}` to the detected namespace and replace the placeholder inside the file.
+- After copy, verify by grepping `BatchPlayModeRunner` and `AutoTestRunner` exist under `Assets/`.
+
+
+
 ### Constitution (.claude/constitution.md)
 Unity-specific articles:
 - §1: All input through IInputProvider, never UnityEngine.Input directly
