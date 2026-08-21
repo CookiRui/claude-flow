@@ -1,3 +1,5 @@
+
+
 # claude-flow
 
 **[English](README_EN.md)**
@@ -57,6 +59,7 @@
 
 ```bash
 npx claude-autosolve init                              # 安装核心到当前目录
+npx claude-autosolve init --lang cn                    # 安装中文模板
 npx claude-autosolve init --preset unity               # 安装核心 + Unity preset
 npx claude-autosolve init /path/to/project --force     # 安装到指定目录，强制覆盖
 ```
